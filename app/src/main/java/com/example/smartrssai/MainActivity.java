@@ -44,6 +44,8 @@ import okhttp3.Response;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -129,7 +131,6 @@ public class MainActivity extends AppCompatActivity {
     private boolean isTtsPaused = false;
     private boolean isTtsPlaying = false;
 
-    // Pre-configured Country Directory Feeds
     private final Map<String, List<FeedInfo>> countryFeedDirectory = new HashMap<>();
 
     @Override
@@ -297,24 +298,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initCountryDirectory() {
-        // Suriname Feeds
         List<FeedInfo> surinameFeeds = new ArrayList<>();
-        surinameFeeds.add(new FeedInfo("Key News Suriname", "https://keynews.sr/feed/", "News"));
-        surinameFeeds.add(new FeedInfo("SUN Suriname", "https://sun.sr/rss", "News & Lifestyle"));
-        surinameFeeds.add(new FeedInfo("SRNieuws", "https://www.srnieuws.com/rss/latest-posts", "News"));
-        surinameFeeds.add(new FeedInfo("Global Voices Suriname", "https://globalvoices.org/feeds/", "Culture & Opinion"));
+        surinameFeeds.add(new FeedInfo("Waterkant", "https://www.waterkant.net/feed/", "News"));
+        surinameFeeds.add(new FeedInfo("De Ware Tijd", "https://dwtonline.com/feed/", "News"));
+        surinameFeeds.add(new FeedInfo("Starnieuws", "https://www.starnieuws.com/index.php/rss/index", "News"));
         countryFeedDirectory.put("Suriname", surinameFeeds);
 
-        // Global / USA Feeds
         List<FeedInfo> usaFeeds = new ArrayList<>();
         usaFeeds.add(new FeedInfo("BBC Tech News", "http://feeds.bbci.co.uk/news/technology/rss.xml", "Tech"));
         usaFeeds.add(new FeedInfo("The Verge", "https://www.theverge.com/rss/index.xml", "Tech"));
         usaFeeds.add(new FeedInfo("Reuters Top News", "https://www.reutersagency.com/feed/", "News"));
-        usaFeeds.add(new FeedInfo("E! News Entertainment", "https://www.eonline.com/syndication/feeds/rss2/topstories.xml", "Entertainment"));
-        usaFeeds.add(new FeedInfo("ESPN Sports", "https://www.espn.com/espn/rss/news", "Sports"));
         countryFeedDirectory.put("United States / Global", usaFeeds);
 
-        // Netherlands Feeds
         List<FeedInfo> nlFeeds = new ArrayList<>();
         nlFeeds.add(new FeedInfo("NOS Nieuws Algemeen", "https://feeds.nos.nl/nosnieuwsalgemeen", "News"));
         nlFeeds.add(new FeedInfo("NOS Tech Nieuws", "https://feeds.nos.nl/nosnieuwstech", "Tech"));
@@ -322,15 +317,19 @@ public class MainActivity extends AppCompatActivity {
         countryFeedDirectory.put("Netherlands", nlFeeds);
     }
 
+    // DISCOVER FEEDS: Features Web Search for Any Country
     private void showDiscoverFeedsDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_discover_feeds, null);
         builder.setView(dialogView);
 
         Spinner spinnerCountry = dialogView.findViewById(R.id.spinnerCountry);
+        EditText inputCustomCountry = dialogView.findViewById(R.id.inputCustomCountry); // Optional input box for custom queries
+        Button btnSearchWebFeeds = dialogView.findViewById(R.id.btnSearchWebFeeds);     // Optional search button
         LinearLayout layoutContainer = dialogView.findViewById(R.id.layoutDiscoveredContainer);
 
         List<String> countries = new ArrayList<>(countryFeedDirectory.keySet());
+        countries.add("Search Other Country...");
         spinnerCountry.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, countries));
 
         final List<CheckBox> selectedBoxes = new ArrayList<>();
@@ -342,34 +341,31 @@ public class MainActivity extends AppCompatActivity {
                 selectedBoxes.clear();
 
                 String selectedCountry = countries.get(position);
+                if (selectedCountry.equals("Search Other Country...")) {
+                    if (inputCustomCountry != null) inputCustomCountry.setVisibility(View.VISIBLE);
+                    if (btnSearchWebFeeds != null) btnSearchWebFeeds.setVisibility(View.VISIBLE);
+                    return;
+                }
+
+                if (inputCustomCountry != null) inputCustomCountry.setVisibility(View.GONE);
+                if (btnSearchWebFeeds != null) btnSearchWebFeeds.setVisibility(View.GONE);
+
                 List<FeedInfo> feeds = countryFeedDirectory.get(selectedCountry);
-
                 if (feeds != null) {
-                    String currentCategory = "";
-                    for (FeedInfo feed : feeds) {
-                        if (!feed.category.equalsIgnoreCase(currentCategory)) {
-                            currentCategory = feed.category;
-                            TextView catHeader = new TextView(MainActivity.this);
-                            catHeader.setText("--- " + currentCategory.toUpperCase() + " ---");
-                            catHeader.setPadding(0, 16, 0, 8);
-                            catHeader.setTypeface(null, Typeface.BOLD);
-                            layoutContainer.addView(catHeader);
-                        }
-
-                        CheckBox cb = new CheckBox(MainActivity.this);
-                        cb.setText(feed.title + "\n(" + feed.url + ")");
-                        cb.setTag(feed.url);
-                        if (feedUrls.contains(feed.url)) {
-                            cb.setChecked(true);
-                            cb.setEnabled(false);
-                        }
-                        selectedBoxes.add(cb);
-                        layoutContainer.addView(cb);
-                    }
+                    renderDiscoveredFeedBoxes(feeds, layoutContainer, selectedBoxes);
                 }
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
+
+        if (btnSearchWebFeeds != null && inputCustomCountry != null) {
+            btnSearchWebFeeds.setOnClickListener(v -> {
+                String targetCountry = inputCustomCountry.getText().toString().trim();
+                if (!targetCountry.isEmpty()) {
+                    performWebRssDiscovery(targetCountry, layoutContainer, selectedBoxes);
+                }
+            });
+        }
 
         builder.setPositiveButton("Add Selected Feeds", (dialog, which) -> {
             boolean addedAny = false;
@@ -392,6 +388,68 @@ public class MainActivity extends AppCompatActivity {
         builder.show();
     }
 
+    private void renderDiscoveredFeedBoxes(List<FeedInfo> feeds, LinearLayout container, List<CheckBox> boxList) {
+        String currentCategory = "";
+        for (FeedInfo feed : feeds) {
+            if (!feed.category.equalsIgnoreCase(currentCategory)) {
+                currentCategory = feed.category;
+                TextView catHeader = new TextView(MainActivity.this);
+                catHeader.setText("--- " + currentCategory.toUpperCase() + " ---");
+                catHeader.setPadding(0, 16, 0, 8);
+                catHeader.setTypeface(null, Typeface.BOLD);
+                container.addView(catHeader);
+            }
+
+            CheckBox cb = new CheckBox(MainActivity.this);
+            cb.setText(feed.title + "\n(" + feed.url + ")");
+            cb.setTag(feed.url);
+            if (feedUrls.contains(feed.url)) {
+                cb.setChecked(true);
+                cb.setEnabled(false);
+            }
+            boxList.add(cb);
+            container.addView(cb);
+        }
+    }
+
+    // Dynamic Search Engine Scraping for Regional Feeds
+    private void performWebRssDiscovery(String queryCountry, LinearLayout container, List<CheckBox> boxList) {
+        container.removeAllViews();
+        boxList.clear();
+
+        TextView loading = new TextView(this);
+        loading.setText("Searching web for RSS feeds in " + queryCountry + "...");
+        container.addView(loading);
+
+        new Thread(() -> {
+            List<FeedInfo> discovered = new ArrayList<>();
+            try {
+                String searchUrl = "https://html.duckduckgo.com/html/?q=" + queryCountry + "+news+rss+feed";
+                Document doc = Jsoup.connect(searchUrl).userAgent("Mozilla/5.0").timeout(8000).get();
+                Elements links = doc.select("a.result__url");
+
+                for (Element l : links) {
+                    String href = l.attr("href");
+                    if (href.contains("rss") || href.contains("feed") || href.endsWith(".xml")) {
+                        String title = l.text().replaceAll("https?://", "").replaceAll("/.*", "");
+                        discovered.add(new FeedInfo(title, href, "Web Discovery"));
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            runOnUiThread(() -> {
+                container.removeAllViews();
+                if (discovered.isEmpty()) {
+                    TextView empty = new TextView(this);
+                    empty.setText("No RSS feeds automatically found for " + queryCountry + ". Try adding direct URLs manually.");
+                    container.addView(empty);
+                } else {
+                    renderDiscoveredFeedBoxes(discovered, container, boxList);
+                }
+            });
+        }).start();
+    }
+
     private void switchView(View target) {
         viewFeeds.setVisibility(View.GONE);
         viewArticles.setVisibility(View.GONE);
@@ -405,6 +463,7 @@ public class MainActivity extends AppCompatActivity {
         inputApiKey.setText(prefs.getString("api_key", ""));
         switchAi.setChecked(prefs.getBoolean("ai_enabled", false));
         switchAutoMarkRead.setChecked(prefs.getBoolean("auto_mark_read", true));
+        spinnerLanguage.setSelection(prefs.getInt("language_index", 0));
         spinnerRetention.setSelection(prefs.getInt("retention_index", 2));
         spinnerDepth.setSelection(prefs.getInt("depth_index", 1));
         spinnerDebateTone.setSelection(prefs.getInt("debate_tone_index", 0));
@@ -413,7 +472,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void saveApiKey() {
         prefs.edit().putString("api_key", inputApiKey.getText().toString().trim()).apply();
-        Toast.makeText(this, "API Key saved successfully!", Toast.LENGTH_SHORT).show();
+        prefs.edit().putInt("language_index", spinnerLanguage.getSelectedItemPosition()).apply();
+        Toast.makeText(this, "Settings saved successfully!", Toast.LENGTH_SHORT).show();
     }
 
     private void updateAiState() {
@@ -422,32 +482,60 @@ public class MainActivity extends AppCompatActivity {
         articleAdapter.notifyDataSetChanged();
     }
 
+    // CLEANED UP & ALPHABETICALLY SORTED TTS VOICES
     private void populateTtsVoices() {
         Set<Voice> voices = tts.getVoices();
-        List<String> voiceNames = new ArrayList<>();
         availableVoices.clear();
+
+        List<VoiceItem> voiceItems = new ArrayList<>();
 
         if (voices != null) {
             for (Voice voice : voices) {
-                availableVoices.add(voice);
-                String label = voice.getLocale().getDisplayLanguage() + " (" + voice.getName() + ")";
+                if (voice.getLocale() == null) continue;
+                
+                String langName = voice.getLocale().getDisplayLanguage(Locale.ENGLISH);
+                String country = voice.getLocale().getDisplayCountry(Locale.ENGLISH);
+                
+                String label = langName + (country.isEmpty() ? "" : " (" + country + ")") + " - " + voice.getName();
                 if (voice.isNetworkConnectionRequired()) {
-                    label += " [HD High Quality]";
+                    label += " [HD]";
                 }
-                voiceNames.add(label);
+
+                voiceItems.add(new VoiceItem(voice, label, langName));
             }
         }
 
-        spinnerTtsVoice.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, voiceNames));
+        // Sort voices alphabetically by Language Name
+        Collections.sort(voiceItems, Comparator.comparing(a -> a.displayLabel));
+
+        List<String> voiceLabels = new ArrayList<>();
+        for (VoiceItem item : voiceItems) {
+            availableVoices.add(item.voice);
+            voiceLabels.add(item.displayLabel);
+        }
+
+        spinnerTtsVoice.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, voiceLabels));
         spinnerTtsVoice.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (!availableVoices.isEmpty()) {
+                if (!availableVoices.isEmpty() && position < availableVoices.size()) {
                     tts.setVoice(availableVoices.get(position));
                 }
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
+    }
+
+    private static class VoiceItem {
+        Voice voice;
+        String displayLabel;
+        String langName;
+
+        VoiceItem(Voice voice, String displayLabel, String langName) {
+            this.voice = voice;
+            this.displayLabel = displayLabel;
+            this.langName = langName;
+        }
     }
 
     private void loadSavedFeeds() {
@@ -603,6 +691,7 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
+    // AI DEBATE LANGUAGE ENFORCEMENT FIX
     private void runAiAction(boolean isDebateMode) {
         String key = prefs.getString("api_key", "");
         if (key.isEmpty()) {
@@ -644,6 +733,8 @@ public class MainActivity extends AppCompatActivity {
                 json.put("model", "anthropic/claude-3-haiku");
 
                 JSONArray msgs = new JSONArray();
+                
+                // Explicit target language handling
                 String targetLang = languages[spinnerLanguage.getSelectedItemPosition()];
                 int depthIdx = prefs.getInt("depth_index", 1);
                 String depthConstraint = depthIdx == 0 ? "Keep it short and concise using tight bullet points." :
@@ -654,14 +745,17 @@ public class MainActivity extends AppCompatActivity {
 
                 String prompt;
                 if (isDebateMode) {
-                    prompt = "Generate a lively AI Debate between Person A and Person B based on these articles in " + targetLang + ".\n" +
-                             "The debate tone/perspective must be: " + tone + ".\n" +
-                             "IMPORTANT: Return ONLY a valid JSON object with keys 'title' (a short 3-6 word title for this debate) and 'content' (the complete transcript formatted cleanly with line breaks).\n\n" +
+                    // Force the language in the instruction regardless of article count
+                    prompt = "CRITICAL INSTRUCTION: You MUST speak, debate, and write your ENTIRE response exclusively in " + targetLang + " language.\n\n" +
+                             "Generate a lively AI Debate between Speaker A and Speaker B comparing these articles.\n" +
+                             "Tone/Perspective: " + tone + ".\n" +
+                             "Return ONLY a valid JSON object with keys 'title' (a short title in " + targetLang + ") and 'content' (the complete transcript in " + targetLang + " formatted cleanly with line breaks).\n\n" +
                              "Articles:\n" + payload.toString();
                 } else {
-                    prompt = "Summarize these articles in " + targetLang + ".\n" +
-                             "Detail depth requested: " + depthConstraint + "\n" +
-                             "IMPORTANT: Return ONLY a valid JSON object with keys 'title' (a short 3-6 word title) and 'content' (the summary bullet points formatted cleanly with line breaks).\n\n" +
+                    prompt = "CRITICAL INSTRUCTION: You MUST write your ENTIRE summary exclusively in " + targetLang + " language.\n\n" +
+                             "Summarize these articles in " + targetLang + ".\n" +
+                             "Detail depth: " + depthConstraint + "\n" +
+                             "Return ONLY a valid JSON object with keys 'title' (a short title in " + targetLang + ") and 'content' (the summary points in " + targetLang + " formatted cleanly with line breaks).\n\n" +
                              "Articles:\n" + payload.toString();
                 }
 
