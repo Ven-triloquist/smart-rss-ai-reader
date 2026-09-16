@@ -20,6 +20,14 @@
             android:textSize="20sp"
             android:textStyle="bold" />
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Tip: Long-press a feed URL to remove it."
+            android:textSize="12sp"
+            android:textColor="#888888"
+            android:layout_marginTop="4dp" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -103,9 +111,18 @@
 
             <Button
                 android:id="@+id/btnSummarizeSelected"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Summarize Selected (0)" />
+                android:layout_weight="1"
+                android:text="Summarize (0)" />
+
+            <Button
+                android:id="@+id/btnDebateSelected"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:text="AI Debate" />
         </LinearLayout>
     </RelativeLayout>
 
@@ -160,7 +177,7 @@
         </ScrollView>
     </LinearLayout>
 
-    <!-- Section 4: Summaries View (History List + Detail View) -->
+    <!-- Section 4: Summaries View -->
     <RelativeLayout
         android:id="@+id/viewSummaries"
         android:layout_width="match_parent"
@@ -208,7 +225,6 @@
             android:layout_centerInParent="true"
             android:visibility="gone" />
 
-        <!-- History ListView -->
         <ListView
             android:id="@+id/listSummaries"
             android:layout_width="match_parent"
@@ -216,7 +232,6 @@
             android:layout_below="@id/summaryHeader"
             android:layout_marginTop="12dp" />
 
-        <!-- Detail Display View -->
         <ScrollView
             android:id="@+id/scrollSummaryDetail"
             android:layout_width="match_parent"
@@ -280,8 +295,32 @@
                 android:id="@+id/switchAutoMarkRead"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Auto Mark Articles as Read when Summarized"
+                android:text="Auto Mark Articles as Read when Processed"
                 android:layout_marginTop="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Summary Length / Detail Depth"
+                android:layout_marginTop="16dp" />
+
+            <Spinner
+                android:id="@+id/spinnerDepth"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AI Debate Perspective / Tone"
+                android:layout_marginTop="16dp" />
+
+            <Spinner
+                android:id="@+id/spinnerDebateTone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
 
             <TextView
                 android:layout_width="wrap_content"
