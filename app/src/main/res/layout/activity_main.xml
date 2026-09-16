@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -161,120 +160,166 @@
         </ScrollView>
     </LinearLayout>
 
-    <!-- Section 4: Summaries View -->
-    <LinearLayout
+    <!-- Section 4: Summaries View (History List + Detail View) -->
+    <RelativeLayout
         android:id="@+id/viewSummaries"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_above="@id/bottomNav"
-        android:orientation="vertical"
         android:padding="16dp"
         android:visibility="gone">
 
         <LinearLayout
+            android:id="@+id/summaryHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
+            <Button
+                android:id="@+id/btnBackToSummariesList"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Back"
+                android:visibility="gone" />
+
             <TextView
+                android:id="@+id/summaryHeaderTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="AI Summaries"
+                android:text="Saved Summaries"
                 android:textSize="20sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:layout_gravity="center_vertical"
+                android:layout_marginStart="8dp" />
 
             <Button
                 android:id="@+id/btnSpeakSummaryTab"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🔊 Read Summary" />
+                android:text="🔊 Read"
+                android:visibility="gone" />
         </LinearLayout>
 
         <ProgressBar
             android:id="@+id/summaryProgressBar"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:visibility="gone"
-            android:layout_marginTop="16dp"/>
+            android:layout_centerInParent="true"
+            android:visibility="gone" />
 
-        <ScrollView
+        <!-- History ListView -->
+        <ListView
+            android:id="@+id/listSummaries"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_marginTop="12dp">
+            android:layout_below="@id/summaryHeader"
+            android:layout_marginTop="12dp" />
+
+        <!-- Detail Display View -->
+        <ScrollView
+            android:id="@+id/scrollSummaryDetail"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_below="@id/summaryHeader"
+            android:layout_marginTop="12dp"
+            android:visibility="gone">
 
             <TextView
                 android:id="@+id/textSummaryOutput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="No summary generated yet. Long-press articles in the Articles tab and tap Summarize."
-                android:textSize="15sp" />
+                android:textSize="15sp"
+                android:lineSpacingExtra="3dp" />
         </ScrollView>
-    </LinearLayout>
+    </RelativeLayout>
 
     <!-- Section 5: Settings View -->
-    <LinearLayout
+    <ScrollView
         android:id="@+id/viewSettings"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_above="@id/bottomNav"
-        android:orientation="vertical"
         android:padding="16dp"
         android:visibility="gone">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Settings"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
-        <EditText
-            android:id="@+id/inputApiKey"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="OpenRouter API Key (sk-or-...)"
-            android:inputType="textPassword"
-            android:layout_marginTop="16dp" />
+            android:orientation="vertical">
 
-        <Button
-            android:id="@+id/btnSaveApiKey"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Save API Key" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Settings"
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
-        <Switch
-            android:id="@+id/switchAi"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Enable AI Actions"
-            android:layout_marginTop="20dp" />
+            <EditText
+                android:id="@+id/inputApiKey"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="OpenRouter API Key (sk-or-...)"
+                android:inputType="textPassword"
+                android:layout_marginTop="16dp" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="AI Output Target Language"
-            android:layout_marginTop="16dp" />
+            <Button
+                android:id="@+id/btnSaveApiKey"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Save API Key" />
 
-        <Spinner
-            android:id="@+id/spinnerLanguage"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" />
+            <Switch
+                android:id="@+id/switchAi"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Enable AI Actions"
+                android:layout_marginTop="20dp" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Select TTS Voice Engine"
-            android:layout_marginTop="16dp" />
+            <Switch
+                android:id="@+id/switchAutoMarkRead"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Auto Mark Articles as Read when Summarized"
+                android:layout_marginTop="16dp" />
 
-        <Spinner
-            android:id="@+id/spinnerTtsVoice"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" />
-    </LinearLayout>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Keep Read Articles For"
+                android:layout_marginTop="16dp" />
+
+            <Spinner
+                android:id="@+id/spinnerRetention"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AI Output Target Language"
+                android:layout_marginTop="16dp" />
+
+            <Spinner
+                android:id="@+id/spinnerLanguage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Select TTS Voice Engine"
+                android:layout_marginTop="16dp" />
+
+            <Spinner
+                android:id="@+id/spinnerTtsVoice"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+    </ScrollView>
 
     <!-- Bottom Navigation Bar -->
     <LinearLayout
