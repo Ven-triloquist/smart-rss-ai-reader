@@ -5,24 +5,40 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <EditText
-        android:id="@+id/apiKeyInput"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Enter OpenRouter API Key"
-        android:inputType="textPassword" />
-
+    <!-- Settings Header: OpenRouter Key -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal">
 
         <EditText
+            android:id="@+id/apiKeyInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Settings: OpenRouter Key (sk-or-...)"
+            android:inputType="textPassword" />
+
+        <Button
+            android:id="@+id/btnSaveKey"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Save" />
+    </LinearLayout>
+
+    <!-- RSS Feed Loader -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <EditText
             android:id="@+id/rssUrlInput"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="Enter RSS Feed URL" />
+            android:hint="RSS Feed URL" />
 
         <Button
             android:id="@+id/btnLoadFeed"
@@ -31,24 +47,34 @@
             android:text="Load Feed" />
     </LinearLayout>
 
-    <!-- Language Selectors for AI Summary & TTS Voice -->
+    <!-- Language & Action Controls -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:layout_marginTop="8dp">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Target Language: " />
 
         <Spinner
             android:id="@+id/languageSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <Button
+            android:id="@+id/btnSummarize"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:enabled="false"
+            android:text="AI Summarize" />
+
+        <Button
+            android:id="@+id/btnSpeak"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Read Aloud" />
     </LinearLayout>
 
+    <!-- Filter Toggle (New / Read) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -56,26 +82,28 @@
         android:layout_marginTop="8dp">
 
         <Button
-            android:id="@+id/btnSummarize"
+            android:id="@+id/btnTabNew"
+            style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="AI Summarize Selected" />
+            android:text="New Articles" />
 
         <Button
-            android:id="@+id/btnSpeak"
+            android:id="@+id/btnTabRead"
+            style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Read Aloud" />
+            android:text="Read Articles" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/statusText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingTop="8dp"
-        android:text="Enter RSS URL to fetch articles."
+        android:paddingTop="4dp"
+        android:text="Ready."
         android:textStyle="italic" />
 
     <ScrollView
@@ -84,7 +112,7 @@
         android:layout_marginTop="8dp">
 
         <TextView
-            android:id="@+id/summaryText"
+            android:id="@+id/contentDisplay"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textSize="15sp" />
