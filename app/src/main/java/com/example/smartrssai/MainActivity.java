@@ -4,12 +4,22 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.Spinner;
+import android.widget.Switch;
 import android.widget.TextView;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -30,11 +40,11 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
-    static class RssArticle {
+    public static class RssArticle {
         String title;
         String link;
         String description;
-        boolean isRead = false;
+        boolean isSelected = false;
 
         RssArticle(String title, String link, String description) {
             this.title = title;
@@ -43,19 +53,23 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private EditText apiKeyInput, rssUrlInput;
+    private EditText rssUrlInput;
+    private Switch switchAiToggle;
     private Spinner languageSpinner;
-    private TextView statusText, contentDisplay;
-    private Button btnSaveKey, btnLoadFeed, btnSummarize, btnSpeak, btnTabNew, btnTabRead;
+    private TextView statusText;
+    private Button btnLoadFeed, btnSummarizeSelected, btnSpeakSummary;
+    private LinearLayout bottomActionBar;
+    private RecyclerView recyclerView;
+
+    private ArticleAdapter adapter;
     private TextToSpeech tts;
+    private SharedPreferences prefs;
 
     private final List<RssArticle> articleList = new ArrayList<>();
     private final String[] languages = {"English", "Spanish", "Dutch", "French", "German"};
     private final String[] langCodes = {"en", "es", "nl", "fr", "de"};
-    
-    private SharedPreferences prefs;
-    private static final String PREF_KEY = "openrouter_api_key";
-    private boolean showingNewTab = true;
+    private static final String PREF_KEY_AI = "ai_summary_enabled";
+    private static final String PREF_KEY_API = "openrouter_api_key";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,169 +78,118 @@ public class MainActivity extends AppCompatActivity {
 
         prefs = getSharedPreferences("SmartRSSSettings", Context.MODE_PRIVATE);
 
-        apiKeyInput = findViewById(R.id.apiKeyInput);
         rssUrlInput = findViewById(R.id.rssUrlInput);
+        switchAiToggle = findViewById(R.id.switchAiToggle);
         languageSpinner = findViewById(R.id.languageSpinner);
         statusText = findViewById(R.id.statusText);
-        contentDisplay = findViewById(R.id.contentDisplay);
-        
-        btnSaveKey = findViewById(R.id.btnSaveKey);
         btnLoadFeed = findViewById(R.id.btnLoadFeed);
-        btnSummarize = findViewById(R.id.btnSummarize);
-        btnSpeak = findViewById(R.id.btnSpeak);
-        btnTabNew = findViewById(R.id.btnTabNew);
-        btnTabRead = findViewById(R.id.btnTabRead);
+        btnSummarizeSelected = findViewById(R.id.btnSummarizeSelected);
+        btnSpeakSummary = findViewById(R.id.btnSpeakSummary);
+        bottomActionBar = findViewById(R.id.bottomActionBar);
+        recyclerView = findViewById(R.id.recyclerView);
 
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, languages);
-        languageSpinner.setAdapter(adapter);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        adapter = new ArticleAdapter();
+        recyclerView.setAdapter(adapter);
 
-        // Load saved API Key if available
-        String savedKey = prefs.getString(PREF_KEY, "");
-        if (!savedKey.isEmpty()) {
-            apiKeyInput.setText(savedKey);
-            btnSummarize.setEnabled(true);
-        }
+        ArrayAdapter<String> langAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, languages);
+        languageSpinner.setAdapter(langAdapter);
 
-        btnSaveKey.setOnClickListener(v -> saveApiKey());
+        boolean isAiEnabled = prefs.getBoolean(PREF_KEY_AI, false);
+        switchAiToggle.setChecked(isAiEnabled);
+
+        switchAiToggle.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            prefs.edit().putBoolean(PREF_KEY_AI, isChecked).apply();
+            updateUiSelectionState();
+        });
+
         btnLoadFeed.setOnClickListener(v -> fetchRssFeed());
-        btnSummarize.setOnClickListener(v -> processAiSummary());
-        btnSpeak.setOnClickListener(v -> speakContent());
-
-        btnTabNew.setOnClickListener(v -> {
-            showingNewTab = true;
-            renderArticles();
-        });
-
-        btnTabRead.setOnClickListener(v -> {
-            showingNewTab = false;
-            renderArticles();
-        });
+        btnSummarizeSelected.setOnClickListener(v -> summarizeSelectedArticles());
+        btnSpeakSummary.setOnClickListener(v -> speakSummary());
 
         tts = new TextToSpeech(this, status -> {
             if (status != TextToSpeech.ERROR) {
                 tts.setLanguage(Locale.US);
             }
         });
+
+        updateUiSelectionState();
     }
 
-    private void saveApiKey() {
-        String key = apiKeyInput.getText().toString().trim();
-        prefs.edit().putString(PREF_KEY, key).apply();
-        btnSummarize.setEnabled(!key.isEmpty());
-        statusText.setText(key.isEmpty() ? "API Key cleared. AI Summarize disabled." : "API Key saved in Settings.");
+    private void updateUiSelectionState() {
+        boolean isAiActive = switchAiToggle.isChecked();
+        adapter.setSelectionModeEnabled(isAiActive);
+        bottomActionBar.setVisibility(isAiActive ? View.VISIBLE : View.GONE);
+        updateSelectionCount();
+    }
+
+    private void updateSelectionCount() {
+        int count = 0;
+        for (RssArticle article : articleList) {
+            if (article.isSelected) count++;
+        }
+        btnSummarizeSelected.setText("Summarize Selected (" + count + ")");
+        btnSummarizeSelected.setEnabled(count > 0);
     }
 
     private void fetchRssFeed() {
         String urlString = rssUrlInput.getText().toString().trim();
         if (urlString.isEmpty()) return;
 
-        statusText.setText("Fetching RSS feed...");
+        statusText.setText("Loading feed...");
         articleList.clear();
 
         new Thread(() -> {
             try {
-                // Jsoup handles both XML and HTML gracefully without XML syntax errors
-                Document doc = Jsoup.connect(urlString)
-                        .userAgent("Mozilla/5.0")
-                        .timeout(10000)
-                        .get();
-
-                // Parse RSS <item> tags
+                Document doc = Jsoup.connect(urlString).userAgent("Mozilla/5.0").timeout(10000).get();
                 Elements items = doc.select("item");
-
-                // Fallback for Atom feeds (<entry> tags)
-                if (items.isEmpty()) {
-                    items = doc.select("entry");
-                }
+                if (items.isEmpty()) items = doc.select("entry");
 
                 for (Element item : items) {
                     String title = item.select("title").text();
-                    
-                    // Get link (handles RSS <link> and Atom <link href="...">)
                     String link = item.select("link").text();
-                    if (link.isEmpty()) {
-                        link = item.select("link").attr("href");
-                    }
-
-                    // Get description/content
-                    String description = item.select("description").text();
-                    if (description.isEmpty()) {
-                        description = item.select("summary, content").text();
-                    }
+                    if (link.isEmpty()) link = item.select("link").attr("href");
+                    String desc = item.select("description").text();
 
                     if (!title.isEmpty()) {
-                        articleList.add(new RssArticle(title, link, description));
+                        articleList.add(new RssArticle(title, link, desc));
                     }
                 }
 
                 runOnUiThread(() -> {
-                    if (articleList.isEmpty()) {
-                        statusText.setText("No RSS items found. Make sure the URL points to an RSS XML feed.");
-                    } else {
-                        statusText.setText("Loaded " + articleList.size() + " articles.");
-                    }
-                    renderArticles();
+                    statusText.setText("Loaded " + articleList.size() + " articles.");
+                    adapter.notifyDataSetChanged();
+                    updateSelectionCount();
                 });
-
             } catch (Exception e) {
-                runOnUiThread(() -> statusText.setText("RSS Load Error: " + e.getMessage()));
+                runOnUiThread(() -> statusText.setText("Load Error: " + e.getMessage()));
             }
         }).start();
     }
 
-    private void renderArticles() {
-        StringBuilder sb = new StringBuilder();
-        int count = 0;
-
-        for (int i = 0; i < articleList.size(); i++) {
-            RssArticle article = articleList.get(i);
-            if (article.isRead != showingNewTab) {
-                count++;
-                sb.append(count).append(". ").append(article.title).append("\n");
-                if (article.description != null && !article.description.isEmpty()) {
-                    String cleanSnippet = Jsoup.parse(article.description).text();
-                    sb.append(cleanSnippet).append("\n");
-                }
-                sb.append("Source: ").append(article.link).append("\n\n---\n\n");
-            }
-        }
-
-        if (count == 0) {
-            sb.append("No articles in ").append(showingNewTab ? "'New'" : "'Read'").append(" section.");
-        }
-
-        contentDisplay.setText(sb.toString());
-    }
-
-    private void processAiSummary() {
-        String apiKey = prefs.getString(PREF_KEY, "").trim();
+    private void summarizeSelectedArticles() {
+        String apiKey = prefs.getString(PREF_KEY_API, "").trim();
         if (apiKey.isEmpty()) {
-            statusText.setText("Please save a valid OpenRouter API Key first.");
+            statusText.setText("OpenRouter API key missing in settings.");
             return;
         }
 
-        int selectedIndex = languageSpinner.getSelectedItemPosition();
-        String targetLang = languages[selectedIndex];
+        int langIndex = languageSpinner.getSelectedItemPosition();
+        String targetLang = languages[langIndex];
 
-        statusText.setText("Extracting article text & invoking AI...");
+        statusText.setText("Extracting selected articles & invoking AI...");
 
         new Thread(() -> {
             try {
-                StringBuilder articlesContext = new StringBuilder();
-                int processedCount = 0;
-
+                StringBuilder payload = new StringBuilder();
                 for (RssArticle article : articleList) {
-                    if (!article.isRead) {
+                    if (article.isSelected) {
                         Document doc = Jsoup.connect(article.link).userAgent("Mozilla/5.0").get();
                         String bodyText = doc.body().text();
-                        String truncated = bodyText.length() > 1500 ? bodyText.substring(0, 1500) : bodyText;
+                        String snippet = bodyText.length() > 1500 ? bodyText.substring(0, 1500) : bodyText;
 
-                        articlesContext.append("Title: ").append(article.title).append("\n")
-                                        .append("Content: ").append(truncated).append("\n\n");
-                        
-                        article.isRead = true; // Move to Read after parsing
-                        processedCount++;
-                        if (processedCount >= 5) break; // Limit payload context size
+                        payload.append("Title: ").append(article.title).append("\n")
+                               .append("Content: ").append(snippet).append("\n\n---\n\n");
                     }
                 }
 
@@ -237,12 +200,12 @@ public class MainActivity extends AppCompatActivity {
                 JSONArray messages = new JSONArray();
                 JSONObject sysMsg = new JSONObject();
                 sysMsg.put("role", "system");
-                sysMsg.put("content", "Summarize these news articles in " + targetLang + ". Provide key points and synthesized insights.");
+                sysMsg.put("content", "Synthesize a structured summary of the selected articles in " + targetLang + ".");
                 messages.put(sysMsg);
 
                 JSONObject userMsg = new JSONObject();
                 userMsg.put("role", "user");
-                userMsg.put("content", articlesContext.toString());
+                userMsg.put("content", payload.toString());
                 messages.put(userMsg);
 
                 jsonBody.put("messages", messages);
@@ -261,34 +224,93 @@ public class MainActivity extends AppCompatActivity {
                 try (Response response = client.newCall(request).execute()) {
                     if (response.isSuccessful() && response.body() != null) {
                         JSONObject resJson = new JSONObject(response.body().string());
-                        String aiOutput = resJson.getJSONArray("choices")
+                        String aiSummary = resJson.getJSONArray("choices")
                                 .getJSONObject(0)
                                 .getJSONObject("message")
                                 .getString("content");
 
                         runOnUiThread(() -> {
-                            statusText.setText("Summary Complete (" + targetLang + "). Articles moved to Read.");
-                            contentDisplay.setText(aiOutput);
+                            statusText.setText("Summary Complete.");
+                            showSummaryDialog(aiSummary);
                         });
                     } else {
                         int code = response.code();
-                        runOnUiThread(() -> statusText.setText("API Error: " + code + " (Check OpenRouter Key/Credits)"));
+                        runOnUiThread(() -> statusText.setText("API Error: " + code));
                     }
                 }
             } catch (Exception e) {
-                runOnUiThread(() -> statusText.setText("Summary Error: " + e.getMessage()));
+                runOnUiThread(() -> statusText.setText("AI Error: " + e.getMessage()));
             }
         }).start();
     }
 
-    private void speakContent() {
-        int selectedIndex = languageSpinner.getSelectedItemPosition();
-        Locale locale = new Locale(langCodes[selectedIndex]);
-        if (tts != null) {
-            tts.setLanguage(locale);
-            String text = contentDisplay.getText().toString();
-            if (!text.isEmpty()) {
-                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
+    private void showSummaryDialog(String summaryText) {
+        new AlertDialog.Builder(this)
+                .setTitle("AI Summary")
+                .setMessage(summaryText)
+                .setPositiveButton("Close", null)
+                .show();
+    }
+
+    private void speakSummary() {
+        int index = languageSpinner.getSelectedItemPosition();
+        tts.setLanguage(new Locale(langCodes[index]));
+    }
+
+    // RecyclerView Adapter
+    class ArticleAdapter extends RecyclerView.Adapter<ArticleAdapter.ViewHolder> {
+
+        private boolean selectionMode = false;
+
+        public void setSelectionModeEnabled(boolean enabled) {
+            this.selectionMode = enabled;
+            notifyDataSetChanged();
+        }
+
+        @NonNull
+        @Override
+        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_rss_article, parent, false);
+            return new ViewHolder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+            RssArticle article = articleList.get(position);
+            holder.title.setText(article.title);
+            holder.snippet.setText(Jsoup.parse(article.description).text());
+
+            holder.checkBox.setVisibility(selectionMode ? View.VISIBLE : View.GONE);
+            holder.checkBox.setChecked(article.isSelected);
+
+            holder.checkBox.setOnClickListener(v -> {
+                article.isSelected = holder.checkBox.isChecked();
+                updateSelectionCount();
+            });
+
+            holder.itemView.setOnClickListener(v -> {
+                if (selectionMode) {
+                    article.isSelected = !article.isSelected;
+                    holder.checkBox.setChecked(article.isSelected);
+                    updateSelectionCount();
+                }
+            });
+        }
+
+        @Override
+        public int getItemCount() {
+            return articleList.size();
+        }
+
+        class ViewHolder extends RecyclerView.ViewHolder {
+            TextView title, snippet;
+            CheckBox checkBox;
+
+            ViewHolder(View itemView) {
+                super(itemView);
+                title = itemView.findViewById(R.id.articleTitle);
+                snippet = itemView.findViewById(R.id.articleSnippet);
+                checkBox = itemView.findViewById(R.id.articleCheckBox);
             }
         }
     }
