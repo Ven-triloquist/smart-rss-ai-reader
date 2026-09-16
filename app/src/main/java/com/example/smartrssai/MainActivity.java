@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
-import android.util.Xml;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -14,9 +13,10 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.xmlpull.v1.XmlPullParser;
 
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -24,8 +24,6 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
-import java.io.InputStream;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -122,40 +120,54 @@ public class MainActivity extends AppCompatActivity {
         String urlString = rssUrlInput.getText().toString().trim();
         if (urlString.isEmpty()) return;
 
-        statusText.setText("Fetching RSS XML feed...");
+        statusText.setText("Fetching RSS feed...");
         articleList.clear();
 
         new Thread(() -> {
-            try (InputStream in = new URL(urlString).openStream()) {
-                XmlPullParser parser = Xml.newPullParser();
-                parser.setInput(in, null);
+            try {
+                // Jsoup handles both XML and HTML gracefully without XML syntax errors
+                Document doc = Jsoup.connect(urlString)
+                        .userAgent("Mozilla/5.0")
+                        .timeout(10000)
+                        .get();
 
-                int eventType = parser.getEventType();
-                String currentTitle = "", currentLink = "", currentDesc = "";
-                boolean insideItem = false;
+                // Parse RSS <item> tags
+                Elements items = doc.select("item");
 
-                while (eventType != XmlPullParser.END_DOCUMENT) {
-                    String tagName = parser.getName();
-                    if (eventType == XmlPullParser.START_TAG) {
-                        if ("item".equalsIgnoreCase(tagName)) {
-                            insideItem = true;
-                        } else if (insideItem) {
-                            if ("title".equalsIgnoreCase(tagName)) currentTitle = parser.nextText();
-                            else if ("link".equalsIgnoreCase(tagName)) currentLink = parser.nextText();
-                            else if ("description".equalsIgnoreCase(tagName)) currentDesc = parser.nextText();
-                        }
-                    } else if (eventType == XmlPullParser.END_TAG && "item".equalsIgnoreCase(tagName)) {
-                        insideItem = false;
-                        articleList.add(new RssArticle(currentTitle, currentLink, currentDesc));
-                        currentTitle = ""; currentLink = ""; currentDesc = "";
+                // Fallback for Atom feeds (<entry> tags)
+                if (items.isEmpty()) {
+                    items = doc.select("entry");
+                }
+
+                for (Element item : items) {
+                    String title = item.select("title").text();
+                    
+                    // Get link (handles RSS <link> and Atom <link href="...">)
+                    String link = item.select("link").text();
+                    if (link.isEmpty()) {
+                        link = item.select("link").attr("href");
                     }
-                    eventType = parser.next();
+
+                    // Get description/content
+                    String description = item.select("description").text();
+                    if (description.isEmpty()) {
+                        description = item.select("summary, content").text();
+                    }
+
+                    if (!title.isEmpty()) {
+                        articleList.add(new RssArticle(title, link, description));
+                    }
                 }
 
                 runOnUiThread(() -> {
-                    statusText.setText("Loaded " + articleList.size() + " articles.");
+                    if (articleList.isEmpty()) {
+                        statusText.setText("No RSS items found. Make sure the URL points to an RSS XML feed.");
+                    } else {
+                        statusText.setText("Loaded " + articleList.size() + " articles.");
+                    }
                     renderArticles();
                 });
+
             } catch (Exception e) {
                 runOnUiThread(() -> statusText.setText("RSS Load Error: " + e.getMessage()));
             }
