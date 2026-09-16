@@ -3,6 +3,7 @@ package com.example.smartrssai;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.Voice;
@@ -351,7 +352,7 @@ public class MainActivity extends AppCompatActivity {
                             TextView catHeader = new TextView(MainActivity.this);
                             catHeader.setText("--- " + currentCategory.toUpperCase() + " ---");
                             catHeader.setPadding(0, 16, 0, 8);
-                            catHeader.setTextStyle(android.graphics.Typeface.BOLD);
+                            catHeader.setTypeface(null, Typeface.BOLD);
                             layoutContainer.addView(catHeader);
                         }
 
@@ -478,7 +479,6 @@ public class MainActivity extends AppCompatActivity {
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, feedUrls);
         listFeeds.setAdapter(adapter);
 
-        // Long press to remove feed
         listFeeds.setOnItemLongClickListener((parent, view, position, id) -> {
             String feedToRemove = feedUrls.get(position);
             new AlertDialog.Builder(this)
@@ -692,7 +692,6 @@ public class MainActivity extends AppCompatActivity {
                             }
                         } catch (Exception ignored) {}
 
-                        // Clean JSON artifacts
                         parsedContent = parsedContent.replaceAll("^\\{\\s*\"content\":\\s*\"", "")
                                                      .replaceAll("\"\\s*\\}$", "")
                                                      .replace("\\n", "\n")
@@ -788,20 +787,16 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Filters out speaker prefixes like "Speaker A:", "Speaker B:", "Host:" so TTS reads smoothly
     private String cleanSpeakerPrefixesForTts(String rawText) {
         return rawText.replaceAll("(?m)^(Speaker\\s+[A-Z]|Person\\s+[A-Z]|Host|Narrator|User):\\s*", "");
     }
 
-    // Media Control Implementation
     private void setupMediaPlayerClickListeners() {
-        // Reader View Listeners
         btnReaderPlayPause.setOnClickListener(v -> toggleTtsPlayPause(btnReaderPlayPause));
         btnReaderStop.setOnClickListener(v -> stopTts());
         btnReaderRewind.setOnClickListener(v -> rewindTts());
         btnReaderFastForward.setOnClickListener(v -> fastForwardTts());
 
-        // Summary View Listeners
         btnSummaryPlayPause.setOnClickListener(v -> toggleTtsPlayPause(btnSummaryPlayPause));
         btnSummaryStop.setOnClickListener(v -> stopTts());
         btnSummaryRewind.setOnClickListener(v -> rewindTts());
@@ -924,7 +919,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception ignored) {}
     }
 
-    // Article Adapter
     class ArticleAdapter extends RecyclerView.Adapter<ArticleAdapter.ArticleHolder> {
 
         @NonNull
