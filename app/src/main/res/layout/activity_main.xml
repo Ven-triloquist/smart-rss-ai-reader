@@ -23,23 +23,23 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Tip: Long-press a feed URL to remove it."
-            android:textSize="12sp"
+            android:text="Tip: Long-press a feed to remove it."
             android:textColor="#888888"
-            android:layout_marginTop="4dp" />
+            android:textSize="12sp"
+            android:layout_marginTop="2dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="12dp">
+            android:layout_marginTop="10dp">
 
             <EditText
                 android:id="@+id/inputFeedUrl"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:hint="Add Feed URL..." />
+                android:hint="Add Custom Feed URL..." />
 
             <Button
                 android:id="@+id/btnAddFeed"
@@ -48,11 +48,18 @@
                 android:text="Add" />
         </LinearLayout>
 
+        <Button
+            android:id="@+id/btnDiscoverFeeds"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🌐 Discover Feeds by Country"
+            android:layout_marginTop="6dp" />
+
         <ListView
             android:id="@+id/listFeeds"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_marginTop="12dp" />
+            android:layout_marginTop="8dp" />
     </LinearLayout>
 
     <!-- Section 2: Articles List View -->
@@ -122,11 +129,11 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginStart="4dp"
-                android:text="AI Debate" />
+                android:text="AI Debate (0)" />
         </LinearLayout>
     </RelativeLayout>
 
-    <!-- Section 3: Reader View for Full Articles -->
+    <!-- Section 3: Reader View -->
     <LinearLayout
         android:id="@+id/viewReader"
         android:layout_width="match_parent"
@@ -136,43 +143,69 @@
         android:padding="16dp"
         android:visibility="gone">
 
+        <Button
+            android:id="@+id/btnBackToArticles"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Back to Articles" />
+
+        <!-- Media Player Controls Bar for Articles -->
         <LinearLayout
+            android:id="@+id/readerMediaControls"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="#2B2B2B"
+            android:padding="8dp"
+            android:layout_marginTop="8dp">
 
             <Button
-                android:id="@+id/btnBackToArticles"
+                android:id="@+id/btnReaderRewind"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Back" />
+                android:text="⏪ -10s" />
 
             <Button
-                android:id="@+id/btnReadFullArticleAloud"
+                android:id="@+id/btnReaderPlayPause"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="🔊 Read Aloud" />
+                android:layout_marginStart="4dp"
+                android:text="▶ Play" />
+
+            <Button
+                android:id="@+id/btnReaderFastForward"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="⏩ +10s" />
+
+            <Button
+                android:id="@+id/btnReaderStop"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="⏹ Stop" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/readerTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="20sp"
+            android:textSize="18sp"
             android:textStyle="bold"
-            android:layout_marginTop="12dp" />
+            android:layout_marginTop="8dp" />
 
         <ScrollView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_marginTop="12dp">
+            android:layout_marginTop="8dp">
 
             <TextView
                 android:id="@+id/readerContent"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="16sp"
+                android:textSize="15sp"
                 android:lineSpacingExtra="4dp" />
         </ScrollView>
     </LinearLayout>
@@ -190,32 +223,70 @@
             android:id="@+id/summaryHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="vertical">
 
-            <Button
-                android:id="@+id/btnBackToSummariesList"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Back"
-                android:visibility="gone" />
+                android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/summaryHeaderTitle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Saved Summaries"
-                android:textSize="20sp"
-                android:textStyle="bold"
-                android:layout_gravity="center_vertical"
-                android:layout_marginStart="8dp" />
+                <Button
+                    android:id="@+id/btnBackToSummariesList"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Back"
+                    android:visibility="gone" />
 
-            <Button
-                android:id="@+id/btnSpeakSummaryTab"
-                android:layout_width="wrap_content"
+                <TextView
+                    android:id="@+id/summaryHeaderTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Saved Summaries"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_gravity="center_vertical"
+                    android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <!-- Media Player Controls Bar for Summaries & Debates -->
+            <LinearLayout
+                android:id="@+id/summaryMediaControls"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="🔊 Read"
-                android:visibility="gone" />
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:background="#2B2B2B"
+                android:padding="6dp"
+                android:layout_marginTop="8dp"
+                android:visibility="gone">
+
+                <Button
+                    android:id="@+id/btnSummaryRewind"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⏪ -10s" />
+
+                <Button
+                    android:id="@+id/btnSummaryPlayPause"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="▶ Play" />
+
+                <Button
+                    android:id="@+id/btnSummaryFastForward"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="⏩ +10s" />
+
+                <Button
+                    android:id="@+id/btnSummaryStop"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="⏹ Stop" />
+            </LinearLayout>
         </LinearLayout>
 
         <ProgressBar
@@ -276,7 +347,7 @@
                 android:layout_height="wrap_content"
                 android:hint="OpenRouter API Key (sk-or-...)"
                 android:inputType="textPassword"
-                android:layout_marginTop="16dp" />
+                android:layout_marginTop="12dp" />
 
             <Button
                 android:id="@+id/btnSaveApiKey"
@@ -289,14 +360,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Enable AI Actions"
-                android:layout_marginTop="20dp" />
+                android:layout_marginTop="16dp" />
 
             <Switch
                 android:id="@+id/switchAutoMarkRead"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Auto Mark Articles as Read when Processed"
-                android:layout_marginTop="16dp" />
+                android:layout_marginTop="12dp" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -308,7 +379,7 @@
                 android:id="@+id/spinnerDepth"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
+                android:layout_marginTop="6dp" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -320,7 +391,7 @@
                 android:id="@+id/spinnerDebateTone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
+                android:layout_marginTop="6dp" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -332,7 +403,7 @@
                 android:id="@+id/spinnerRetention"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
+                android:layout_marginTop="6dp" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -344,19 +415,19 @@
                 android:id="@+id/spinnerLanguage"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
+                android:layout_marginTop="6dp" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Select TTS Voice Engine"
+                android:text="Select System TTS Voice Engine"
                 android:layout_marginTop="16dp" />
 
             <Spinner
                 android:id="@+id/spinnerTtsVoice"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
+                android:layout_marginTop="6dp" />
         </LinearLayout>
     </ScrollView>
 
