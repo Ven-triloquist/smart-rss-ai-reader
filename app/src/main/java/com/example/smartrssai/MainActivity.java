@@ -1,14 +1,15 @@
 package com.example.smartrssai;
 
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.Voice;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -21,6 +22,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -62,7 +64,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnTabNew, btnTabRead, btnAddFeed, btnSaveApiKey, btnSummarizeSelected, btnSpeakSummary;
     private EditText inputFeedUrl, inputApiKey;
     private Switch switchAi;
-    private Spinner spinnerLanguage;
+    private Spinner spinnerLanguage, spinnerTtsVoice;
     private TextView statusText;
     private ListView listFeeds;
     private RecyclerView recyclerArticles;
@@ -75,10 +77,9 @@ public class MainActivity extends AppCompatActivity {
     private final List<String> feedUrls = new ArrayList<>();
     private final List<Article> masterArticles = new ArrayList<>();
     private final List<Article> displayedArticles = new ArrayList<>();
-    
-    private final String[] languages = {"English", "Spanish", "Dutch", "French", "German"};
-    private final String[] langCodes = {"en", "es", "nl", "fr", "de"};
+    private final List<Voice> availableVoices = new ArrayList<>();
 
+    private final String[] languages = {"English", "Spanish", "Dutch", "French", "German"};
     private boolean showingNewTab = true;
 
     @Override
@@ -110,29 +111,30 @@ public class MainActivity extends AppCompatActivity {
         inputApiKey = findViewById(R.id.inputApiKey);
         switchAi = findViewById(R.id.switchAi);
         spinnerLanguage = findViewById(R.id.spinnerLanguage);
+        spinnerTtsVoice = findViewById(R.id.spinnerTtsVoice);
         statusText = findViewById(R.id.statusText);
         listFeeds = findViewById(R.id.listFeeds);
         recyclerArticles = findViewById(R.id.recyclerArticles);
         layoutAiBar = findViewById(R.id.layoutAiBar);
 
-        // Layout Manager & Adapters
+        // RecyclerView Setup
         recyclerArticles.setLayoutManager(new LinearLayoutManager(this));
         articleAdapter = new ArticleAdapter();
         recyclerArticles.setAdapter(articleAdapter);
 
+        // Language Spinner Setup
         ArrayAdapter<String> langAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, languages);
         spinnerLanguage.setAdapter(langAdapter);
 
-        // Navigation Routing
+        // Navigation Listeners
         navFeeds.setOnClickListener(v -> switchView(viewFeeds));
         navArticles.setOnClickListener(v -> switchView(viewArticles));
         navSettings.setOnClickListener(v -> switchView(viewSettings));
 
-        // Articles Tabs
+        // Tabs
         btnTabNew.setOnClickListener(v -> { showingNewTab = true; filterArticles(); });
         btnTabRead.setOnClickListener(v -> { showingNewTab = false; filterArticles(); });
 
-        // Load Preferences
         loadSettings();
 
         btnAddFeed.setOnClickListener(v -> addFeed());
@@ -143,12 +145,15 @@ public class MainActivity extends AppCompatActivity {
         });
 
         btnSummarizeSelected.setOnClickListener(v -> runAiSummary());
+        btnSpeakSummary.setOnClickListener(v -> speakSummary());
 
+        // Initialize TextToSpeech (Independent of AI Settings)
         tts = new TextToSpeech(this, status -> {
-            if (status != TextToSpeech.ERROR) tts.setLanguage(Locale.US);
+            if (status == TextToSpeech.SUCCESS) {
+                populateTtsVoices();
+            }
         });
 
-        // Default View
         switchView(viewArticles);
         loadSavedFeeds();
     }
@@ -175,6 +180,36 @@ public class MainActivity extends AppCompatActivity {
         boolean enabled = switchAi.isChecked();
         layoutAiBar.setVisibility(enabled ? View.VISIBLE : View.GONE);
         articleAdapter.notifyDataSetChanged();
+    }
+
+    private void populateTtsVoices() {
+        Set<Voice> voices = tts.getVoices();
+        List<String> voiceNames = new ArrayList<>();
+        availableVoices.clear();
+
+        if (voices != null) {
+            for (Voice voice : voices) {
+                if (!voice.isNetworkConnectionRequired()) {
+                    availableVoices.add(voice);
+                    voiceNames.add(voice.getLocale().getDisplayLanguage() + " (" + voice.getName() + ")");
+                }
+            }
+        }
+
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, voiceNames);
+        spinnerTtsVoice.setAdapter(adapter);
+
+        spinnerTtsVoice.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (!availableVoices.isEmpty()) {
+                    tts.setVoice(availableVoices.get(position));
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
     }
 
     private void loadSavedFeeds() {
@@ -303,6 +338,21 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
+    private void speakSummary() {
+        if (displayedArticles.isEmpty()) return;
+        
+        StringBuilder speechContent = new StringBuilder();
+        for (Article article : displayedArticles) {
+            if (article.isSelected || !switchAi.isChecked()) {
+                speechContent.append(article.title).append(". ");
+            }
+        }
+
+        if (tts != null && speechContent.length() > 0) {
+            tts.speak(speechContent.toString(), TextToSpeech.QUEUE_FLUSH, null, null);
+        }
+    }
+
     // Article Adapter
     class ArticleAdapter extends RecyclerView.Adapter<ArticleAdapter.ArticleHolder> {
 
@@ -328,13 +378,13 @@ public class MainActivity extends AppCompatActivity {
                 updateSelectionCounter();
             });
 
+            // Open article inside the app using CustomTabs
             holder.itemView.setOnClickListener(v -> {
-                a.isRead = true; // Mark as read
-                filterArticles(); // Move to Read section
-                
-                // Open full web browser link
-                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(a.link));
-                startActivity(browserIntent);
+                a.isRead = true;
+                filterArticles();
+
+                CustomTabsIntent customTabsIntent = new CustomTabsIntent.Builder().build();
+                customTabsIntent.launchUrl(MainActivity.this, Uri.parse(a.link));
             });
         }
 
