@@ -44,9 +44,11 @@ import okhttp3.Response;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -67,10 +69,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public static class SummaryItem {
-        String title;
-        String timestamp;
-        String content;
-
+        String title, timestamp, content;
         SummaryItem(String title, String timestamp, String content) {
             this.title = title;
             this.timestamp = timestamp;
@@ -78,10 +77,25 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public static class FeedInfo {
+        String title, url, category;
+        FeedInfo(String title, String url, String category) {
+            this.title = title;
+            this.url = url;
+            this.category = category;
+        }
+    }
+
     private View viewFeeds, viewArticles, viewSettings, viewReader, viewSummaries;
     private Button navFeeds, navArticles, navSettings, navSummaries;
-    private Button btnTabNew, btnTabRead, btnAddFeed, btnSaveApiKey, btnSummarizeSelected, btnDebateSelected;
-    private Button btnBackToArticles, btnReadFullArticleAloud, btnSpeakSummaryTab, btnBackToSummariesList;
+    private Button btnTabNew, btnTabRead, btnAddFeed, btnDiscoverFeeds, btnSaveApiKey, btnSummarizeSelected, btnDebateSelected;
+    private Button btnBackToArticles, btnBackToSummariesList;
+    
+    // Media Player Controls
+    private LinearLayout readerMediaControls, summaryMediaControls;
+    private Button btnReaderRewind, btnReaderPlayPause, btnReaderFastForward, btnReaderStop;
+    private Button btnSummaryRewind, btnSummaryPlayPause, btnSummaryFastForward, btnSummaryStop;
+
     private EditText inputFeedUrl, inputApiKey;
     private Switch switchAi, switchAutoMarkRead;
     private Spinner spinnerLanguage, spinnerTtsVoice, spinnerRetention, spinnerDepth, spinnerDebateTone;
@@ -108,8 +122,14 @@ public class MainActivity extends AppCompatActivity {
     private final String[] debateTones = {"Main Facts & Balanced Analysis", "Satirical & Witty", "Economic & Market Focus", "Financial & Investor Angle", "Philosophical & Societal Impact"};
 
     private boolean showingNewTab = true;
-    private String currentFullArticleText = "";
-    private String activeSummaryText = "";
+    private String activeTextToRead = "";
+    private String[] activeParagraphChunks;
+    private int currentSpeechChunkIndex = 0;
+    private boolean isTtsPaused = false;
+    private boolean isTtsPlaying = false;
+
+    // Pre-configured Country Directory Feeds
+    private final Map<String, List<FeedInfo>> countryFeedDirectory = new HashMap<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -118,7 +138,9 @@ public class MainActivity extends AppCompatActivity {
 
         prefs = getSharedPreferences("SmartRSSPrefs", Context.MODE_PRIVATE);
 
-        // Views
+        initCountryDirectory();
+
+        // Bind Views
         viewFeeds = findViewById(R.id.viewFeeds);
         viewArticles = findViewById(R.id.viewArticles);
         viewSettings = findViewById(R.id.viewSettings);
@@ -131,22 +153,34 @@ public class MainActivity extends AppCompatActivity {
         navSettings = findViewById(R.id.navSettings);
         navSummaries = findViewById(R.id.navSummaries);
 
-        // Reader Controls
+        // Controls
         btnBackToArticles = findViewById(R.id.btnBackToArticles);
-        btnReadFullArticleAloud = findViewById(R.id.btnReadFullArticleAloud);
         readerTitle = findViewById(R.id.readerTitle);
         readerContent = findViewById(R.id.readerContent);
 
-        // Summary View Controls
+        // Reader Media Player Bar
+        readerMediaControls = findViewById(R.id.readerMediaControls);
+        btnReaderRewind = findViewById(R.id.btnReaderRewind);
+        btnReaderPlayPause = findViewById(R.id.btnReaderPlayPause);
+        btnReaderFastForward = findViewById(R.id.btnReaderFastForward);
+        btnReaderStop = findViewById(R.id.btnReaderStop);
+
+        // Summary Media Player Bar
+        summaryMediaControls = findViewById(R.id.summaryMediaControls);
+        btnSummaryRewind = findViewById(R.id.btnSummaryRewind);
+        btnSummaryPlayPause = findViewById(R.id.btnSummaryPlayPause);
+        btnSummaryFastForward = findViewById(R.id.btnSummaryFastForward);
+        btnSummaryStop = findViewById(R.id.btnSummaryStop);
+
+        // Summary Controls
         btnBackToSummariesList = findViewById(R.id.btnBackToSummariesList);
-        btnSpeakSummaryTab = findViewById(R.id.btnSpeakSummaryTab);
         summaryHeaderTitle = findViewById(R.id.summaryHeaderTitle);
         summaryProgressBar = findViewById(R.id.summaryProgressBar);
         listSummaries = findViewById(R.id.listSummaries);
         scrollSummaryDetail = findViewById(R.id.scrollSummaryDetail);
         textSummaryOutput = findViewById(R.id.textSummaryOutput);
 
-        // Settings Controls
+        // Settings
         inputApiKey = findViewById(R.id.inputApiKey);
         switchAi = findViewById(R.id.switchAi);
         switchAutoMarkRead = findViewById(R.id.switchAutoMarkRead);
@@ -161,6 +195,7 @@ public class MainActivity extends AppCompatActivity {
         btnTabNew = findViewById(R.id.btnTabNew);
         btnTabRead = findViewById(R.id.btnTabRead);
         btnAddFeed = findViewById(R.id.btnAddFeed);
+        btnDiscoverFeeds = findViewById(R.id.btnDiscoverFeeds);
         btnSummarizeSelected = findViewById(R.id.btnSummarizeSelected);
         btnDebateSelected = findViewById(R.id.btnDebateSelected);
         inputFeedUrl = findViewById(R.id.inputFeedUrl);
@@ -180,7 +215,7 @@ public class MainActivity extends AppCompatActivity {
         spinnerDepth.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, depthOptions));
         spinnerDebateTone.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, debateTones));
 
-        // Nav Click Listeners
+        // Navigation
         navFeeds.setOnClickListener(v -> switchView(viewFeeds));
         navArticles.setOnClickListener(v -> switchView(viewArticles));
         navSettings.setOnClickListener(v -> switchView(viewSettings));
@@ -196,6 +231,7 @@ public class MainActivity extends AppCompatActivity {
         loadSettings();
 
         btnAddFeed.setOnClickListener(v -> addFeed());
+        btnDiscoverFeeds.setOnClickListener(v -> showDiscoverFeedsDialog());
         btnSaveApiKey.setOnClickListener(v -> saveApiKey());
         
         switchAi.setOnCheckedChangeListener((btn, isChecked) -> {
@@ -235,21 +271,19 @@ public class MainActivity extends AppCompatActivity {
         btnSummarizeSelected.setOnClickListener(v -> runAiAction(false));
         btnDebateSelected.setOnClickListener(v -> runAiAction(true));
 
-        btnBackToArticles.setOnClickListener(v -> switchView(viewArticles));
-        btnReadFullArticleAloud.setOnClickListener(v -> {
-            if (tts != null && !currentFullArticleText.isEmpty()) {
-                tts.speak(currentFullArticleText, TextToSpeech.QUEUE_FLUSH, null, null);
-            }
+        btnBackToArticles.setOnClickListener(v -> {
+            stopTts();
+            switchView(viewArticles);
         });
 
-        btnBackToSummariesList.setOnClickListener(v -> showSummariesList());
-        btnSpeakSummaryTab.setOnClickListener(v -> {
-            if (tts != null && !activeSummaryText.isEmpty()) {
-                tts.speak(activeSummaryText, TextToSpeech.QUEUE_FLUSH, null, null);
-            }
+        btnBackToSummariesList.setOnClickListener(v -> {
+            stopTts();
+            showSummariesList();
         });
 
-        // Initialize Standalone System TTS Engine
+        setupMediaPlayerClickListeners();
+
+        // Setup Standalone TTS Engine
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 populateTtsVoices();
@@ -259,6 +293,102 @@ public class MainActivity extends AppCompatActivity {
         loadSavedSummaries();
         switchView(viewArticles);
         loadSavedFeeds();
+    }
+
+    private void initCountryDirectory() {
+        // Suriname Feeds
+        List<FeedInfo> surinameFeeds = new ArrayList<>();
+        surinameFeeds.add(new FeedInfo("Key News Suriname", "https://keynews.sr/feed/", "News"));
+        surinameFeeds.add(new FeedInfo("SUN Suriname", "https://sun.sr/rss", "News & Lifestyle"));
+        surinameFeeds.add(new FeedInfo("SRNieuws", "https://www.srnieuws.com/rss/latest-posts", "News"));
+        surinameFeeds.add(new FeedInfo("Global Voices Suriname", "https://globalvoices.org/feeds/", "Culture & Opinion"));
+        countryFeedDirectory.put("Suriname", surinameFeeds);
+
+        // Global / USA Feeds
+        List<FeedInfo> usaFeeds = new ArrayList<>();
+        usaFeeds.add(new FeedInfo("BBC Tech News", "http://feeds.bbci.co.uk/news/technology/rss.xml", "Tech"));
+        usaFeeds.add(new FeedInfo("The Verge", "https://www.theverge.com/rss/index.xml", "Tech"));
+        usaFeeds.add(new FeedInfo("Reuters Top News", "https://www.reutersagency.com/feed/", "News"));
+        usaFeeds.add(new FeedInfo("E! News Entertainment", "https://www.eonline.com/syndication/feeds/rss2/topstories.xml", "Entertainment"));
+        usaFeeds.add(new FeedInfo("ESPN Sports", "https://www.espn.com/espn/rss/news", "Sports"));
+        countryFeedDirectory.put("United States / Global", usaFeeds);
+
+        // Netherlands Feeds
+        List<FeedInfo> nlFeeds = new ArrayList<>();
+        nlFeeds.add(new FeedInfo("NOS Nieuws Algemeen", "https://feeds.nos.nl/nosnieuwsalgemeen", "News"));
+        nlFeeds.add(new FeedInfo("NOS Tech Nieuws", "https://feeds.nos.nl/nosnieuwstech", "Tech"));
+        nlFeeds.add(new FeedInfo("Tweakers", "https://feeds.feedburner.com/tweakers/mixed", "Tech"));
+        countryFeedDirectory.put("Netherlands", nlFeeds);
+    }
+
+    private void showDiscoverFeedsDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_discover_feeds, null);
+        builder.setView(dialogView);
+
+        Spinner spinnerCountry = dialogView.findViewById(R.id.spinnerCountry);
+        LinearLayout layoutContainer = dialogView.findViewById(R.id.layoutDiscoveredContainer);
+
+        List<String> countries = new ArrayList<>(countryFeedDirectory.keySet());
+        spinnerCountry.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, countries));
+
+        final List<CheckBox> selectedBoxes = new ArrayList<>();
+
+        spinnerCountry.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                layoutContainer.removeAllViews();
+                selectedBoxes.clear();
+
+                String selectedCountry = countries.get(position);
+                List<FeedInfo> feeds = countryFeedDirectory.get(selectedCountry);
+
+                if (feeds != null) {
+                    String currentCategory = "";
+                    for (FeedInfo feed : feeds) {
+                        if (!feed.category.equalsIgnoreCase(currentCategory)) {
+                            currentCategory = feed.category;
+                            TextView catHeader = new TextView(MainActivity.this);
+                            catHeader.setText("--- " + currentCategory.toUpperCase() + " ---");
+                            catHeader.setPadding(0, 16, 0, 8);
+                            catHeader.setTextStyle(android.graphics.Typeface.BOLD);
+                            layoutContainer.addView(catHeader);
+                        }
+
+                        CheckBox cb = new CheckBox(MainActivity.this);
+                        cb.setText(feed.title + "\n(" + feed.url + ")");
+                        cb.setTag(feed.url);
+                        if (feedUrls.contains(feed.url)) {
+                            cb.setChecked(true);
+                            cb.setEnabled(false);
+                        }
+                        selectedBoxes.add(cb);
+                        layoutContainer.addView(cb);
+                    }
+                }
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        builder.setPositiveButton("Add Selected Feeds", (dialog, which) -> {
+            boolean addedAny = false;
+            for (CheckBox cb : selectedBoxes) {
+                if (cb.isChecked() && cb.isEnabled()) {
+                    String url = (String) cb.getTag();
+                    if (!feedUrls.contains(url)) {
+                        feedUrls.add(url);
+                        addedAny = true;
+                    }
+                }
+            }
+            if (addedAny) {
+                prefs.edit().putStringSet("feed_list", new HashSet<>(feedUrls)).apply();
+                renderFeedList();
+                fetchAllFeeds();
+            }
+        });
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
     }
 
     private void switchView(View target) {
@@ -298,10 +428,12 @@ public class MainActivity extends AppCompatActivity {
 
         if (voices != null) {
             for (Voice voice : voices) {
-                if (!voice.isNetworkConnectionRequired()) {
-                    availableVoices.add(voice);
-                    voiceNames.add(voice.getLocale().getDisplayLanguage() + " (" + voice.getName() + ")");
+                availableVoices.add(voice);
+                String label = voice.getLocale().getDisplayLanguage() + " (" + voice.getName() + ")";
+                if (voice.isNetworkConnectionRequired()) {
+                    label += " [HD High Quality]";
                 }
+                voiceNames.add(label);
             }
         }
 
@@ -318,14 +450,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadSavedFeeds() {
-        Set<String> saved = prefs.getStringSet("feed_list", new HashSet<>());
+        Set<String> saved = prefs.getStringSet("feed_list", null);
         feedUrls.clear();
-        feedUrls.addAll(saved);
-        if (feedUrls.isEmpty()) {
-            feedUrls.add("https://www.srnieuws.com/rss/latest-posts");
+        if (saved != null) {
+            feedUrls.addAll(saved);
         }
         renderFeedList();
-        fetchAllFeeds();
+        if (!feedUrls.isEmpty()) {
+            fetchAllFeeds();
+        } else {
+            statusText.setText("No RSS feeds subscribed yet. Use Discover or Add Feed.");
+        }
     }
 
     private void addFeed() {
@@ -343,12 +478,12 @@ public class MainActivity extends AppCompatActivity {
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, feedUrls);
         listFeeds.setAdapter(adapter);
 
-        // Long press to remove a feed
+        // Long press to remove feed
         listFeeds.setOnItemLongClickListener((parent, view, position, id) -> {
             String feedToRemove = feedUrls.get(position);
             new AlertDialog.Builder(this)
                     .setTitle("Remove Feed")
-                    .setMessage("Remove " + feedToRemove + "?\nThis will delete all articles from this feed.")
+                    .setMessage("Remove " + feedToRemove + "?\nThis will remove all associated articles from memory.")
                     .setPositiveButton("Remove", (dialog, which) -> {
                         feedUrls.remove(position);
                         prefs.edit().putStringSet("feed_list", new HashSet<>(feedUrls)).apply();
@@ -436,6 +571,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void openCleanArticle(Article a) {
+        stopTts();
         switchView(viewReader);
         readerTitle.setText(a.title);
         readerContent.setText("Extracting clean article text...");
@@ -456,8 +592,11 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
 
-                currentFullArticleText = cleanText.length() > 0 ? cleanText.toString() : Jsoup.parse(a.description).text();
-                runOnUiThread(() -> readerContent.setText(currentFullArticleText));
+                String fullText = cleanText.length() > 0 ? cleanText.toString() : Jsoup.parse(a.description).text();
+                runOnUiThread(() -> {
+                    readerContent.setText(fullText);
+                    prepareTtsChunks(fullText);
+                });
             } catch (Exception e) {
                 runOnUiThread(() -> readerContent.setText("Failed to extract full article text.\nLink: " + a.link));
             }
@@ -471,8 +610,9 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        stopTts();
         switchView(viewSummaries);
-        showSummaryDetail(isDebateMode ? "Generating AI Debate..." : "Generating Summary...", "Fetching content and contacting AI...");
+        showSummaryDetail(isDebateMode ? "Generating AI Debate..." : "Generating Summary...", "Fetching content and contacting AI...", false);
         summaryProgressBar.setVisibility(View.VISIBLE);
 
         new Thread(() -> {
@@ -514,7 +654,7 @@ public class MainActivity extends AppCompatActivity {
 
                 String prompt;
                 if (isDebateMode) {
-                    prompt = "Generate a lively AI Debate between Speaker A and Speaker B based on these articles in " + targetLang + ".\n" +
+                    prompt = "Generate a lively AI Debate between Person A and Person B based on these articles in " + targetLang + ".\n" +
                              "The debate tone/perspective must be: " + tone + ".\n" +
                              "IMPORTANT: Return ONLY a valid JSON object with keys 'title' (a short 3-6 word title for this debate) and 'content' (the complete transcript formatted cleanly with line breaks).\n\n" +
                              "Articles:\n" + payload.toString();
@@ -552,7 +692,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                         } catch (Exception ignored) {}
 
-                        // Clean out trailing/leading structural artifacts for clean TTS speech
+                        // Clean JSON artifacts
                         parsedContent = parsedContent.replaceAll("^\\{\\s*\"content\":\\s*\"", "")
                                                      .replaceAll("\"\\s*\\}$", "")
                                                      .replace("\\n", "\n")
@@ -564,7 +704,6 @@ public class MainActivity extends AppCompatActivity {
                         savedSummaries.add(0, newSummary);
                         saveSummariesToPrefs();
 
-                        // Clear selections and mark read if requested
                         boolean autoMarkRead = prefs.getBoolean("auto_mark_read", true);
                         for (Article a : masterArticles) {
                             if (a.isSelected) {
@@ -581,20 +720,20 @@ public class MainActivity extends AppCompatActivity {
                         runOnUiThread(() -> {
                             summaryProgressBar.setVisibility(View.GONE);
                             filterArticles();
-                            showSummaryDetail(finalTitle, finalContent);
+                            showSummaryDetail(finalTitle, finalContent, true);
                         });
                     } else {
                         String err = res.body() != null ? res.body().string() : "Unknown response error";
                         runOnUiThread(() -> {
                             summaryProgressBar.setVisibility(View.GONE);
-                            showSummaryDetail("API Error", "Error (" + res.code() + "): " + err);
+                            showSummaryDetail("API Error", "Error (" + res.code() + "): " + err, false);
                         });
                     }
                 }
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     summaryProgressBar.setVisibility(View.GONE);
-                    showSummaryDetail("Failed", "Error running AI action: " + e.getLocalizedMessage());
+                    showSummaryDetail("Failed", "Error running AI action: " + e.getLocalizedMessage(), false);
                 });
             }
         }).start();
@@ -603,7 +742,7 @@ public class MainActivity extends AppCompatActivity {
     private void showSummariesList() {
         summaryHeaderTitle.setText("Saved Summaries");
         btnBackToSummariesList.setVisibility(View.GONE);
-        btnSpeakSummaryTab.setVisibility(View.GONE);
+        summaryMediaControls.setVisibility(View.GONE);
         scrollSummaryDetail.setVisibility(View.GONE);
         listSummaries.setVisibility(View.VISIBLE);
 
@@ -617,7 +756,7 @@ public class MainActivity extends AppCompatActivity {
 
         listSummaries.setOnItemClickListener((parent, view, position, id) -> {
             SummaryItem item = savedSummaries.get(position);
-            showSummaryDetail(item.title, item.content);
+            showSummaryDetail(item.title, item.content, true);
         });
 
         listSummaries.setOnItemLongClickListener((parent, view, position, id) -> {
@@ -635,15 +774,124 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void showSummaryDetail(String title, String content) {
+    private void showSummaryDetail(String title, String content, boolean enableControls) {
         summaryHeaderTitle.setText(title);
-        activeSummaryText = content;
         textSummaryOutput.setText(content);
 
         btnBackToSummariesList.setVisibility(View.VISIBLE);
-        btnSpeakSummaryTab.setVisibility(View.VISIBLE);
+        summaryMediaControls.setVisibility(enableControls ? View.VISIBLE : View.GONE);
         listSummaries.setVisibility(View.GONE);
         scrollSummaryDetail.setVisibility(View.VISIBLE);
+
+        if (enableControls) {
+            prepareTtsChunks(cleanSpeakerPrefixesForTts(content));
+        }
+    }
+
+    // Filters out speaker prefixes like "Speaker A:", "Speaker B:", "Host:" so TTS reads smoothly
+    private String cleanSpeakerPrefixesForTts(String rawText) {
+        return rawText.replaceAll("(?m)^(Speaker\\s+[A-Z]|Person\\s+[A-Z]|Host|Narrator|User):\\s*", "");
+    }
+
+    // Media Control Implementation
+    private void setupMediaPlayerClickListeners() {
+        // Reader View Listeners
+        btnReaderPlayPause.setOnClickListener(v -> toggleTtsPlayPause(btnReaderPlayPause));
+        btnReaderStop.setOnClickListener(v -> stopTts());
+        btnReaderRewind.setOnClickListener(v -> rewindTts());
+        btnReaderFastForward.setOnClickListener(v -> fastForwardTts());
+
+        // Summary View Listeners
+        btnSummaryPlayPause.setOnClickListener(v -> toggleTtsPlayPause(btnSummaryPlayPause));
+        btnSummaryStop.setOnClickListener(v -> stopTts());
+        btnSummaryRewind.setOnClickListener(v -> rewindTts());
+        btnSummaryFastForward.setOnClickListener(v -> fastForwardTts());
+    }
+
+    private void prepareTtsChunks(String text) {
+        stopTts();
+        activeTextToRead = text;
+        activeParagraphChunks = text.split("\n+");
+        currentSpeechChunkIndex = 0;
+    }
+
+    private void toggleTtsPlayPause(Button targetButton) {
+        if (tts == null || activeParagraphChunks == null || activeParagraphChunks.length == 0) return;
+
+        if (isTtsPlaying) {
+            tts.stop();
+            isTtsPlaying = false;
+            isTtsPaused = true;
+            targetButton.setText("▶ Play");
+        } else {
+            isTtsPlaying = true;
+            isTtsPaused = false;
+            targetButton.setText("⏸ Pause");
+            speakCurrentChunk(targetButton);
+        }
+    }
+
+    private void speakCurrentChunk(Button targetButton) {
+        if (currentSpeechChunkIndex >= activeParagraphChunks.length) {
+            stopTts();
+            return;
+        }
+
+        String toSpeak = activeParagraphChunks[currentSpeechChunkIndex].trim();
+        if (toSpeak.isEmpty()) {
+            currentSpeechChunkIndex++;
+            speakCurrentChunk(targetButton);
+            return;
+        }
+
+        tts.speak(toSpeak, TextToSpeech.QUEUE_FLUSH, null, "TTS_CHUNK_ID");
+        tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+            @Override
+            public void onStart(String utteranceId) {}
+
+            @Override
+            public void onDone(String utteranceId) {
+                if (isTtsPlaying && !isTtsPaused) {
+                    currentSpeechChunkIndex++;
+                    runOnUiThread(() -> speakCurrentChunk(targetButton));
+                }
+            }
+
+            @Override
+            public void onError(String utteranceId) {}
+        });
+    }
+
+    private void rewindTts() {
+        if (currentSpeechChunkIndex > 0) {
+            currentSpeechChunkIndex = Math.max(0, currentSpeechChunkIndex - 1);
+            if (isTtsPlaying) {
+                tts.stop();
+                speakCurrentChunk(viewReader.getVisibility() == View.VISIBLE ? btnReaderPlayPause : btnSummaryPlayPause);
+            }
+        }
+    }
+
+    private void fastForwardTts() {
+        if (activeParagraphChunks != null && currentSpeechChunkIndex < activeParagraphChunks.length - 1) {
+            currentSpeechChunkIndex++;
+            if (isTtsPlaying) {
+                tts.stop();
+                speakCurrentChunk(viewReader.getVisibility() == View.VISIBLE ? btnReaderPlayPause : btnSummaryPlayPause);
+            }
+        }
+    }
+
+    private void stopTts() {
+        if (tts != null) {
+            tts.stop();
+        }
+        isTtsPlaying = false;
+        isTtsPaused = false;
+        currentSpeechChunkIndex = 0;
+
+        btnReaderPlayPause.setText("▶ Play");
+        btnSummaryPlayPause.setText("▶ Play");
     }
 
     private void saveSummariesToPrefs() {
@@ -676,7 +924,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception ignored) {}
     }
 
-    // Article Adapter with Improved Multi-Select Interactions
+    // Article Adapter
     class ArticleAdapter extends RecyclerView.Adapter<ArticleAdapter.ArticleHolder> {
 
         @NonNull
@@ -697,12 +945,10 @@ public class MainActivity extends AppCompatActivity {
 
             holder.itemView.setOnClickListener(v -> {
                 if (isAnyArticleSelected()) {
-                    // Selection mode is active: standard tap toggles items
                     a.isSelected = !a.isSelected;
                     notifyItemChanged(pos);
                     updateSelectionCounter();
                 } else {
-                    // Standard tap opens full article reader
                     if (!a.isRead) {
                         a.isRead = true;
                         a.readTimestamp = System.currentTimeMillis();
@@ -712,7 +958,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-            // Long-press starts or toggles selection mode
             holder.itemView.setOnLongClickListener(v -> {
                 a.isSelected = !a.isSelected;
                 notifyItemChanged(pos);
