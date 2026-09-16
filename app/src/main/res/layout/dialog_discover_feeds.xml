@@ -1,34 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="16dp">
 
     <TextView
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Select Country:"
-        android:textStyle="bold" />
+        android:text="Discover Feeds"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:paddingBottom="12dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Select a Country:"
+        android:textSize="14sp"
+        android:paddingBottom="4dp" />
 
     <Spinner
         android:id="@+id/spinnerCountry"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp" />
+        android:layout_height="48dp"
+        android:layout_marginBottom="12dp" />
 
-    <TextView
-        android:layout_width="wrap_content"
+    <EditText
+        android:id="@+id/inputCustomCountry"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Available RSS Feeds:"
-        android:textStyle="bold"
-        android:layout_marginTop="16dp" />
+        android:hint="Enter country name (e.g., Suriname)"
+        android:inputType="textPersonName"
+        android:visibility="gone"
+        android:layout_marginBottom="8dp" />
+
+    <Button
+        android:id="@+id/btnSearchWebFeeds"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Search Web For RSS Feeds"
+        android:visibility="gone"
+        android:layout_marginBottom="12dp" />
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="8dp">
+        android:layout_height="250dp">
 
         <LinearLayout
             android:id="@+id/layoutDiscoveredContainer"
