@@ -2,7 +2,6 @@ package com.example.smartrssai;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.net.Uri;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.Voice;
@@ -16,13 +15,14 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
+
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -58,13 +59,15 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private View viewFeeds, viewArticles, viewSettings;
-    private Button navFeeds, navArticles, navSettings;
-    private Button btnTabNew, btnTabRead, btnAddFeed, btnSaveApiKey, btnSummarizeSelected, btnSpeakSummary;
+    private View viewFeeds, viewArticles, viewSettings, viewReader, viewSummaries;
+    private Button navFeeds, navArticles, navSettings, navSummaries;
+    private Button btnTabNew, btnTabRead, btnAddFeed, btnSaveApiKey, btnSummarizeSelected;
+    private Button btnBackToArticles, btnReadFullArticleAloud, btnSpeakSummaryTab;
     private EditText inputFeedUrl, inputApiKey;
     private Switch switchAi;
     private Spinner spinnerLanguage, spinnerTtsVoice;
-    private TextView statusText;
+    private TextView statusText, readerTitle, readerContent, textSummaryOutput;
+    private ProgressBar summaryProgressBar;
     private ListView listFeeds;
     private RecyclerView recyclerArticles;
     private LinearLayout layoutAiBar;
@@ -80,6 +83,8 @@ public class MainActivity extends AppCompatActivity {
 
     private final String[] languages = {"English", "Spanish", "Dutch", "French", "German"};
     private boolean showingNewTab = true;
+    private String currentFullArticleText = "";
+    private String lastGeneratedSummary = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -88,15 +93,27 @@ public class MainActivity extends AppCompatActivity {
 
         prefs = getSharedPreferences("SmartRSSPrefs", Context.MODE_PRIVATE);
 
-        // UI Views
+        // Sections
         viewFeeds = findViewById(R.id.viewFeeds);
         viewArticles = findViewById(R.id.viewArticles);
         viewSettings = findViewById(R.id.viewSettings);
+        viewReader = findViewById(R.id.viewReader);
+        viewSummaries = findViewById(R.id.viewSummaries);
 
-        // Nav Buttons
+        // Navigation
         navFeeds = findViewById(R.id.navFeeds);
         navArticles = findViewById(R.id.navArticles);
         navSettings = findViewById(R.id.navSettings);
+        navSummaries = findViewById(R.id.navSummaries);
+
+        // Reader & Summary Controls
+        btnBackToArticles = findViewById(R.id.btnBackToArticles);
+        btnReadFullArticleAloud = findViewById(R.id.btnReadFullArticleAloud);
+        btnSpeakSummaryTab = findViewById(R.id.btnSpeakSummaryTab);
+        readerTitle = findViewById(R.id.readerTitle);
+        readerContent = findViewById(R.id.readerContent);
+        textSummaryOutput = findViewById(R.id.textSummaryOutput);
+        summaryProgressBar = findViewById(R.id.summaryProgressBar);
 
         // Sub Controls
         btnTabNew = findViewById(R.id.btnTabNew);
@@ -104,7 +121,6 @@ public class MainActivity extends AppCompatActivity {
         btnAddFeed = findViewById(R.id.btnAddFeed);
         btnSaveApiKey = findViewById(R.id.btnSaveApiKey);
         btnSummarizeSelected = findViewById(R.id.btnSummarizeSelected);
-        btnSpeakSummary = findViewById(R.id.btnSpeakSummary);
 
         inputFeedUrl = findViewById(R.id.inputFeedUrl);
         inputApiKey = findViewById(R.id.inputApiKey);
@@ -125,12 +141,13 @@ public class MainActivity extends AppCompatActivity {
         ArrayAdapter<String> langAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, languages);
         spinnerLanguage.setAdapter(langAdapter);
 
-        // Bottom Nav Listeners
+        // Nav Listeners
         navFeeds.setOnClickListener(v -> switchView(viewFeeds));
         navArticles.setOnClickListener(v -> switchView(viewArticles));
         navSettings.setOnClickListener(v -> switchView(viewSettings));
+        navSummaries.setOnClickListener(v -> switchView(viewSummaries));
 
-        // Article Tabs
+        // Tabs
         btnTabNew.setOnClickListener(v -> { showingNewTab = true; filterArticles(); });
         btnTabRead.setOnClickListener(v -> { showingNewTab = false; filterArticles(); });
 
@@ -144,9 +161,21 @@ public class MainActivity extends AppCompatActivity {
         });
 
         btnSummarizeSelected.setOnClickListener(v -> runAiSummary());
-        btnSpeakSummary.setOnClickListener(v -> speakSummary());
 
-        // Initialize Native TextToSpeech Engine (Runs completely independent of AI state)
+        btnBackToArticles.setOnClickListener(v -> switchView(viewArticles));
+        btnReadFullArticleAloud.setOnClickListener(v -> {
+            if (tts != null && !currentFullArticleText.isEmpty()) {
+                tts.speak(currentFullArticleText, TextToSpeech.QUEUE_FLUSH, null, null);
+            }
+        });
+
+        btnSpeakSummaryTab.setOnClickListener(v -> {
+            if (tts != null && !lastGeneratedSummary.isEmpty()) {
+                tts.speak(lastGeneratedSummary, TextToSpeech.QUEUE_FLUSH, null, null);
+            }
+        });
+
+        // Initialize Standalone System TTS Engine
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 populateTtsVoices();
@@ -161,6 +190,8 @@ public class MainActivity extends AppCompatActivity {
         viewFeeds.setVisibility(View.GONE);
         viewArticles.setVisibility(View.GONE);
         viewSettings.setVisibility(View.GONE);
+        viewReader.setVisibility(View.GONE);
+        viewSummaries.setVisibility(View.GONE);
         target.setVisibility(View.VISIBLE);
     }
 
@@ -172,7 +203,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void saveApiKey() {
         prefs.edit().putString("api_key", inputApiKey.getText().toString().trim()).apply();
-        statusText.setText("API Key saved successfully.");
+        Toast.makeText(this, "API Key saved successfully!", Toast.LENGTH_SHORT).show();
     }
 
     private void updateAiState() {
@@ -188,7 +219,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (voices != null) {
             for (Voice voice : voices) {
-                if (!voice.isNetworkConnectionRequired()) { // Filter for offline-compatible voices
+                if (!voice.isNetworkConnectionRequired()) {
                     availableVoices.add(voice);
                     voiceNames.add(voice.getLocale().getDisplayLanguage() + " (" + voice.getName() + ")");
                 }
@@ -282,39 +313,77 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateSelectionCounter() {
         int count = 0;
-        for (Article a : displayedArticles) if (a.isSelected) count++;
+        for (Article a : masterArticles) if (a.isSelected) count++;
         btnSummarizeSelected.setText("Summarize Selected (" + count + ")");
+    }
+
+    private void openCleanArticle(Article a) {
+        switchView(viewReader);
+        readerTitle.setText(a.title);
+        readerContent.setText("Extracting clean article text...");
+
+        new Thread(() -> {
+            try {
+                Document doc = Jsoup.connect(a.link).userAgent("Mozilla/5.0").timeout(8000).get();
+                doc.select("script, style, nav, header, footer, iframe, .ads, .comments").remove();
+                
+                Elements paragraphs = doc.select("p");
+                StringBuilder cleanText = new StringBuilder();
+                for (Element p : paragraphs) {
+                    String text = p.text().trim();
+                    if (text.length() > 20) {
+                        cleanText.append(text).append("\n\n");
+                    }
+                }
+
+                currentFullArticleText = cleanText.length() > 0 ? cleanText.toString() : doc.body().text();
+
+                runOnUiThread(() -> readerContent.setText(currentFullArticleText));
+            } catch (Exception e) {
+                runOnUiThread(() -> readerContent.setText("Failed to extract full article text.\nLink: " + a.link));
+            }
+        }).start();
     }
 
     private void runAiSummary() {
         String key = prefs.getString("api_key", "");
         if (key.isEmpty()) {
-            statusText.setText("OpenRouter API Key is missing in Settings.");
+            Toast.makeText(this, "Set API Key in Settings first", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        String targetLang = languages[spinnerLanguage.getSelectedItemPosition()];
-        statusText.setText("Scraping content & requesting summary...");
+        switchView(viewSummaries);
+        summaryProgressBar.setVisibility(View.VISIBLE);
+        textSummaryOutput.setText("Extracting selected articles & requesting summary...");
 
         new Thread(() -> {
             try {
                 StringBuilder payload = new StringBuilder();
-                for (Article a : displayedArticles) {
+                for (Article a : masterArticles) {
                     if (a.isSelected) {
-                        Document doc = Jsoup.connect(a.link).userAgent("Mozilla/5.0").get();
-                        String text = doc.body().text();
-                        payload.append("Title: ").append(a.title).append("\n")
-                               .append("Content: ").append(text.length() > 1200 ? text.substring(0, 1200) : text)
-                               .append("\n\n---\n\n");
+                        try {
+                            Document doc = Jsoup.connect(a.link).userAgent("Mozilla/5.0").timeout(5000).get();
+                            String text = doc.body().text();
+                            payload.append("Title: ").append(a.title).append("\n")
+                                   .append("Content: ").append(text.length() > 1000 ? text.substring(0, 1000) : text)
+                                   .append("\n\n---\n\n");
+                        } catch (Exception e) {
+                            payload.append("Title: ").append(a.title).append("\nContent: ").append(a.description).append("\n\n---\n\n");
+                        }
                     }
                 }
 
-                OkHttpClient client = new OkHttpClient();
+                OkHttpClient client = new OkHttpClient.Builder()
+                        .connectTimeout(15, TimeUnit.SECONDS)
+                        .readTimeout(30, TimeUnit.SECONDS)
+                        .build();
+
                 JSONObject json = new JSONObject();
                 json.put("model", "anthropic/claude-3.5-haiku");
 
                 JSONArray msgs = new JSONArray();
-                msgs.put(new JSONObject().put("role", "system").put("content", "Summarize these articles in " + targetLang + ". Use clear bullet points."));
+                String targetLang = languages[spinnerLanguage.getSelectedItemPosition()];
+                msgs.put(new JSONObject().put("role", "system").put("content", "Summarize these articles in " + targetLang + " using clear bullet points."));
                 msgs.put(new JSONObject().put("role", "user").put("content", payload.toString()));
                 json.put("messages", msgs);
 
@@ -326,34 +395,31 @@ public class MainActivity extends AppCompatActivity {
 
                 try (Response res = client.newCall(req).execute()) {
                     if (res.isSuccessful() && res.body() != null) {
-                        String summary = new JSONObject(res.body().string())
+                        lastGeneratedSummary = new JSONObject(res.body().string())
                                 .getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
-                        runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("AI Summary").setMessage(summary).setPositiveButton("OK", null).show());
+                        
+                        runOnUiThread(() -> {
+                            summaryProgressBar.setVisibility(View.GONE);
+                            textSummaryOutput.setText(lastGeneratedSummary);
+                        });
+                    } else {
+                        String err = res.body() != null ? res.body().string() : "Unknown response error";
+                        runOnUiThread(() -> {
+                            summaryProgressBar.setVisibility(View.GONE);
+                            textSummaryOutput.setText("API Error (" + res.code() + "): " + err);
+                        });
                     }
                 }
             } catch (Exception e) {
-                runOnUiThread(() -> statusText.setText("AI Error: " + e.getMessage()));
+                runOnUiThread(() -> {
+                    summaryProgressBar.setVisibility(View.GONE);
+                    textSummaryOutput.setText("Failed to generate summary: " + e.getLocalizedMessage());
+                });
             }
         }).start();
     }
 
-    private void speakSummary() {
-        if (displayedArticles.isEmpty()) return;
-
-        StringBuilder speechContent = new StringBuilder();
-        for (Article article : displayedArticles) {
-            // Reads selected articles if AI is on, or reads all visible articles if AI is turned off
-            if (article.isSelected || !switchAi.isChecked()) {
-                speechContent.append(article.title).append(". ");
-            }
-        }
-
-        if (tts != null && speechContent.length() > 0) {
-            tts.speak(speechContent.toString(), TextToSpeech.QUEUE_FLUSH, null, null);
-        }
-    }
-
-    // RecyclerView Adapter
+    // Article Adapter
     class ArticleAdapter extends RecyclerView.Adapter<ArticleAdapter.ArticleHolder> {
 
         @NonNull
@@ -369,22 +435,22 @@ public class MainActivity extends AppCompatActivity {
             holder.title.setText(a.title);
             holder.snippet.setText(Jsoup.parse(a.description).text());
 
-            boolean aiEnabled = switchAi.isChecked();
-            holder.checkBox.setVisibility(aiEnabled ? View.VISIBLE : View.GONE);
+            holder.checkBox.setVisibility(a.isSelected ? View.VISIBLE : View.GONE);
             holder.checkBox.setChecked(a.isSelected);
 
-            holder.checkBox.setOnClickListener(v -> {
-                a.isSelected = holder.checkBox.isChecked();
-                updateSelectionCounter();
-            });
-
-            // Opens full article inside an In-App Chrome Custom Tab
+            // Tap to open full in-app article reader
             holder.itemView.setOnClickListener(v -> {
                 a.isRead = true;
                 filterArticles();
+                openCleanArticle(a);
+            });
 
-                CustomTabsIntent customTabsIntent = new CustomTabsIntent.Builder().build();
-                customTabsIntent.launchUrl(MainActivity.this, Uri.parse(a.link));
+            // Long-press to toggle selection for AI summary
+            holder.itemView.setOnLongClickListener(v -> {
+                a.isSelected = !a.isSelected;
+                notifyItemChanged(pos);
+                updateSelectionCounter();
+                return true;
             });
         }
 
