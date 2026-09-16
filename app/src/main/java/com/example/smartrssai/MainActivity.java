@@ -317,15 +317,14 @@ public class MainActivity extends AppCompatActivity {
         countryFeedDirectory.put("Netherlands", nlFeeds);
     }
 
-    // DISCOVER FEEDS: Features Web Search for Any Country
     private void showDiscoverFeedsDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_discover_feeds, null);
         builder.setView(dialogView);
 
         Spinner spinnerCountry = dialogView.findViewById(R.id.spinnerCountry);
-        EditText inputCustomCountry = dialogView.findViewById(R.id.inputCustomCountry); // Optional input box for custom queries
-        Button btnSearchWebFeeds = dialogView.findViewById(R.id.btnSearchWebFeeds);     // Optional search button
+        EditText inputCustomCountry = dialogView.findViewById(R.id.inputCustomCountry);
+        Button btnSearchWebFeeds = dialogView.findViewById(R.id.btnSearchWebFeeds);
         LinearLayout layoutContainer = dialogView.findViewById(R.id.layoutDiscoveredContainer);
 
         List<String> countries = new ArrayList<>(countryFeedDirectory.keySet());
@@ -412,7 +411,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Dynamic Search Engine Scraping for Regional Feeds
     private void performWebRssDiscovery(String queryCountry, LinearLayout container, List<CheckBox> boxList) {
         container.removeAllViews();
         boxList.clear();
@@ -482,7 +480,6 @@ public class MainActivity extends AppCompatActivity {
         articleAdapter.notifyDataSetChanged();
     }
 
-    // CLEANED UP & ALPHABETICALLY SORTED TTS VOICES
     private void populateTtsVoices() {
         Set<Voice> voices = tts.getVoices();
         availableVoices.clear();
@@ -505,7 +502,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Sort voices alphabetically by Language Name
         Collections.sort(voiceItems, Comparator.comparing(a -> a.displayLabel));
 
         List<String> voiceLabels = new ArrayList<>();
@@ -691,7 +687,6 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    // AI DEBATE LANGUAGE ENFORCEMENT FIX
     private void runAiAction(boolean isDebateMode) {
         String key = prefs.getString("api_key", "");
         if (key.isEmpty()) {
@@ -734,7 +729,6 @@ public class MainActivity extends AppCompatActivity {
 
                 JSONArray msgs = new JSONArray();
                 
-                // Explicit target language handling
                 String targetLang = languages[spinnerLanguage.getSelectedItemPosition()];
                 int depthIdx = prefs.getInt("depth_index", 1);
                 String depthConstraint = depthIdx == 0 ? "Keep it short and concise using tight bullet points." :
@@ -745,7 +739,6 @@ public class MainActivity extends AppCompatActivity {
 
                 String prompt;
                 if (isDebateMode) {
-                    // Force the language in the instruction regardless of article count
                     prompt = "CRITICAL INSTRUCTION: You MUST speak, debate, and write your ENTIRE response exclusively in " + targetLang + " language.\n\n" +
                              "Generate a lively AI Debate between Speaker A and Speaker B comparing these articles.\n" +
                              "Tone/Perspective: " + tone + ".\n" +
