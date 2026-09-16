@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Section 1: Feeds Management View -->
+    <!-- Section 1: Feeds View -->
     <LinearLayout
         android:id="@+id/viewFeeds"
         android:layout_width="match_parent"
@@ -48,7 +48,7 @@
             android:layout_marginTop="12dp" />
     </LinearLayout>
 
-    <!-- Section 2: Articles Reader View (New / Read) -->
+    <!-- Section 2: Articles List View -->
     <RelativeLayout
         android:id="@+id/viewArticles"
         android:layout_width="match_parent"
@@ -100,24 +100,120 @@
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
             android:orientation="horizontal"
-            android:visibility="gone">
+            android:padding="4dp">
 
             <Button
                 android:id="@+id/btnSummarizeSelected"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
                 android:text="Summarize Selected (0)" />
-
-            <Button
-                android:id="@+id/btnSpeakSummary"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Read Aloud" />
         </LinearLayout>
     </RelativeLayout>
 
-    <!-- Section 3: Settings View -->
+    <!-- Section 3: Reader View for Full Articles -->
+    <LinearLayout
+        android:id="@+id/viewReader"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/bottomNav"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnBackToArticles"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Back" />
+
+            <Button
+                android:id="@+id/btnReadFullArticleAloud"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="🔊 Read Aloud" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/readerTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_marginTop="12dp" />
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="12dp">
+
+            <TextView
+                android:id="@+id/readerContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:lineSpacingExtra="4dp" />
+        </ScrollView>
+    </LinearLayout>
+
+    <!-- Section 4: Summaries View -->
+    <LinearLayout
+        android:id="@+id/viewSummaries"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/bottomNav"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="AI Summaries"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnSpeakSummaryTab"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔊 Read Summary" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/summaryProgressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            android:layout_marginTop="16dp"/>
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="12dp">
+
+            <TextView
+                android:id="@+id/textSummaryOutput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No summary generated yet. Long-press articles in the Articles tab and tap Summarize."
+                android:textSize="15sp" />
+        </ScrollView>
+    </LinearLayout>
+
+    <!-- Section 5: Settings View -->
     <LinearLayout
         android:id="@+id/viewSettings"
         android:layout_width="match_parent"
@@ -128,16 +224,11 @@
         android:visibility="gone">
 
         <TextView
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:text="Select TTS Voice"
-    android:layout_marginTop="16dp" />
-
-        <Spinner
-    android:id="@+id/spinnerTtsVoice"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_marginTop="8dp" />
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Settings"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
         <EditText
             android:id="@+id/inputApiKey"
@@ -160,11 +251,10 @@
             android:text="Enable AI Actions"
             android:layout_marginTop="20dp" />
 
-        <!-- Fixed XML Entity issue on this element -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="AI Output &amp; TTS Language"
+            android:text="AI Output Target Language"
             android:layout_marginTop="16dp" />
 
         <Spinner
@@ -172,9 +262,21 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Select TTS Voice Engine"
+            android:layout_marginTop="16dp" />
+
+        <Spinner
+            android:id="@+id/spinnerTtsVoice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
     </LinearLayout>
 
-    <!-- Bottom Navigation Tabs -->
+    <!-- Bottom Navigation Bar -->
     <LinearLayout
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
@@ -198,6 +300,14 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Articles" />
+
+        <Button
+            android:id="@+id/navSummaries"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Summaries" />
 
         <Button
             android:id="@+id/navSettings"
