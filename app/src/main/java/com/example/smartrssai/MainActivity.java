@@ -317,6 +317,7 @@ public class MainActivity extends AppCompatActivity {
         btnSummarizeSelected.setText("Summarize Selected (" + count + ")");
     }
 
+    // Fixed Article Content Scraper
     private void openCleanArticle(Article a) {
         switchView(viewReader);
         readerTitle.setText(a.title);
@@ -325,18 +326,28 @@ public class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 Document doc = Jsoup.connect(a.link).userAgent("Mozilla/5.0").timeout(8000).get();
-                doc.select("script, style, nav, header, footer, iframe, .ads, .comments").remove();
-                
-                Elements paragraphs = doc.select("p");
+                // Strip non-content elements
+                doc.select("script, style, nav, header, footer, iframe, .ads, .comments, .sidebar, .related, aside, .trending").remove();
+
+                // Target article containers directly first
+                Elements container = doc.select("article, .entry-content, .post-content, .article-body, #content");
+                Elements paragraphs;
+                if (!container.isEmpty()) {
+                    paragraphs = container.select("p");
+                } else {
+                    paragraphs = doc.select("p");
+                }
+
                 StringBuilder cleanText = new StringBuilder();
                 for (Element p : paragraphs) {
                     String text = p.text().trim();
-                    if (text.length() > 20) {
+                    // Filters out short side menu titles or UI snippet links
+                    if (text.length() > 40) {
                         cleanText.append(text).append("\n\n");
                     }
                 }
 
-                currentFullArticleText = cleanText.length() > 0 ? cleanText.toString() : doc.body().text();
+                currentFullArticleText = cleanText.length() > 0 ? cleanText.toString() : Jsoup.parse(a.description).text();
 
                 runOnUiThread(() -> readerContent.setText(currentFullArticleText));
             } catch (Exception e) {
@@ -345,6 +356,7 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
+    // Fixed OpenRouter API Endpoint Target
     private void runAiSummary() {
         String key = prefs.getString("api_key", "");
         if (key.isEmpty()) {
@@ -363,9 +375,12 @@ public class MainActivity extends AppCompatActivity {
                     if (a.isSelected) {
                         try {
                             Document doc = Jsoup.connect(a.link).userAgent("Mozilla/5.0").timeout(5000).get();
-                            String text = doc.body().text();
+                            doc.select("script, style, nav, header, footer, iframe, .ads, .comments, .sidebar").remove();
+                            Elements container = doc.select("article, .entry-content, .post-content, .article-body");
+                            String text = !container.isEmpty() ? container.text() : doc.body().text();
+                            
                             payload.append("Title: ").append(a.title).append("\n")
-                                   .append("Content: ").append(text.length() > 1000 ? text.substring(0, 1000) : text)
+                                   .append("Content: ").append(text.length() > 1500 ? text.substring(0, 1500) : text)
                                    .append("\n\n---\n\n");
                         } catch (Exception e) {
                             payload.append("Title: ").append(a.title).append("\nContent: ").append(a.description).append("\n\n---\n\n");
@@ -379,7 +394,8 @@ public class MainActivity extends AppCompatActivity {
                         .build();
 
                 JSONObject json = new JSONObject();
-                json.put("model", "anthropic/claude-3.5-haiku");
+                // Valid OpenRouter model identifiers
+                json.put("model", "anthropic/claude-3-haiku");
 
                 JSONArray msgs = new JSONArray();
                 String targetLang = languages[spinnerLanguage.getSelectedItemPosition()];
