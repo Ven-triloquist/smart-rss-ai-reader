@@ -42,7 +42,6 @@ import okhttp3.Response;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
@@ -89,7 +88,7 @@ public class MainActivity extends AppCompatActivity {
 
         prefs = getSharedPreferences("SmartRSSPrefs", Context.MODE_PRIVATE);
 
-        // Views
+        // UI Views
         viewFeeds = findViewById(R.id.viewFeeds);
         viewArticles = findViewById(R.id.viewArticles);
         viewSettings = findViewById(R.id.viewSettings);
@@ -117,21 +116,21 @@ public class MainActivity extends AppCompatActivity {
         recyclerArticles = findViewById(R.id.recyclerArticles);
         layoutAiBar = findViewById(R.id.layoutAiBar);
 
-        // RecyclerView Setup
+        // Setup RecyclerView
         recyclerArticles.setLayoutManager(new LinearLayoutManager(this));
         articleAdapter = new ArticleAdapter();
         recyclerArticles.setAdapter(articleAdapter);
 
-        // Language Spinner Setup
+        // Setup Target Language Spinner
         ArrayAdapter<String> langAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, languages);
         spinnerLanguage.setAdapter(langAdapter);
 
-        // Navigation Listeners
+        // Bottom Nav Listeners
         navFeeds.setOnClickListener(v -> switchView(viewFeeds));
         navArticles.setOnClickListener(v -> switchView(viewArticles));
         navSettings.setOnClickListener(v -> switchView(viewSettings));
 
-        // Tabs
+        // Article Tabs
         btnTabNew.setOnClickListener(v -> { showingNewTab = true; filterArticles(); });
         btnTabRead.setOnClickListener(v -> { showingNewTab = false; filterArticles(); });
 
@@ -147,7 +146,7 @@ public class MainActivity extends AppCompatActivity {
         btnSummarizeSelected.setOnClickListener(v -> runAiSummary());
         btnSpeakSummary.setOnClickListener(v -> speakSummary());
 
-        // Initialize TextToSpeech (Independent of AI Settings)
+        // Initialize Native TextToSpeech Engine (Runs completely independent of AI state)
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 populateTtsVoices();
@@ -173,7 +172,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void saveApiKey() {
         prefs.edit().putString("api_key", inputApiKey.getText().toString().trim()).apply();
-        statusText.setText("API Key saved.");
+        statusText.setText("API Key saved successfully.");
     }
 
     private void updateAiState() {
@@ -189,7 +188,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (voices != null) {
             for (Voice voice : voices) {
-                if (!voice.isNetworkConnectionRequired()) {
+                if (!voice.isNetworkConnectionRequired()) { // Filter for offline-compatible voices
                     availableVoices.add(voice);
                     voiceNames.add(voice.getLocale().getDisplayLanguage() + " (" + voice.getName() + ")");
                 }
@@ -290,12 +289,12 @@ public class MainActivity extends AppCompatActivity {
     private void runAiSummary() {
         String key = prefs.getString("api_key", "");
         if (key.isEmpty()) {
-            statusText.setText("OpenRouter Key missing in Settings.");
+            statusText.setText("OpenRouter API Key is missing in Settings.");
             return;
         }
 
         String targetLang = languages[spinnerLanguage.getSelectedItemPosition()];
-        statusText.setText("Parsing articles & requesting summary...");
+        statusText.setText("Scraping content & requesting summary...");
 
         new Thread(() -> {
             try {
@@ -329,7 +328,7 @@ public class MainActivity extends AppCompatActivity {
                     if (res.isSuccessful() && res.body() != null) {
                         String summary = new JSONObject(res.body().string())
                                 .getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
-                        runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Summary").setMessage(summary).setPositiveButton("OK", null).show());
+                        runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("AI Summary").setMessage(summary).setPositiveButton("OK", null).show());
                     }
                 }
             } catch (Exception e) {
@@ -340,9 +339,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void speakSummary() {
         if (displayedArticles.isEmpty()) return;
-        
+
         StringBuilder speechContent = new StringBuilder();
         for (Article article : displayedArticles) {
+            // Reads selected articles if AI is on, or reads all visible articles if AI is turned off
             if (article.isSelected || !switchAi.isChecked()) {
                 speechContent.append(article.title).append(". ");
             }
@@ -353,7 +353,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Article Adapter
+    // RecyclerView Adapter
     class ArticleAdapter extends RecyclerView.Adapter<ArticleAdapter.ArticleHolder> {
 
         @NonNull
@@ -378,7 +378,7 @@ public class MainActivity extends AppCompatActivity {
                 updateSelectionCounter();
             });
 
-            // Open article inside the app using CustomTabs
+            // Opens full article inside an In-App Chrome Custom Tab
             holder.itemView.setOnClickListener(v -> {
                 a.isRead = true;
                 filterArticles();
