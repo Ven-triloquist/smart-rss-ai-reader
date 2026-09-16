@@ -53,15 +53,16 @@ import java.util.concurrent.TimeUnit;
 public class MainActivity extends AppCompatActivity {
 
     public static class Article {
-        String title, link, description;
+        String title, link, description, feedUrl;
         boolean isRead = false;
         boolean isSelected = false;
         long readTimestamp = 0;
 
-        Article(String title, String link, String description) {
+        Article(String title, String link, String description, String feedUrl) {
             this.title = title;
             this.link = link;
             this.description = description;
+            this.feedUrl = feedUrl;
         }
     }
 
@@ -79,11 +80,11 @@ public class MainActivity extends AppCompatActivity {
 
     private View viewFeeds, viewArticles, viewSettings, viewReader, viewSummaries;
     private Button navFeeds, navArticles, navSettings, navSummaries;
-    private Button btnTabNew, btnTabRead, btnAddFeed, btnSaveApiKey, btnSummarizeSelected;
+    private Button btnTabNew, btnTabRead, btnAddFeed, btnSaveApiKey, btnSummarizeSelected, btnDebateSelected;
     private Button btnBackToArticles, btnReadFullArticleAloud, btnSpeakSummaryTab, btnBackToSummariesList;
     private EditText inputFeedUrl, inputApiKey;
     private Switch switchAi, switchAutoMarkRead;
-    private Spinner spinnerLanguage, spinnerTtsVoice, spinnerRetention;
+    private Spinner spinnerLanguage, spinnerTtsVoice, spinnerRetention, spinnerDepth, spinnerDebateTone;
     private TextView statusText, readerTitle, readerContent, textSummaryOutput, summaryHeaderTitle;
     private ProgressBar summaryProgressBar;
     private ListView listFeeds, listSummaries;
@@ -103,6 +104,8 @@ public class MainActivity extends AppCompatActivity {
 
     private final String[] languages = {"English", "Spanish", "Dutch", "French", "German"};
     private final String[] retentionOptions = {"1 Day", "3 Days", "7 Days", "Keep Forever"};
+    private final String[] depthOptions = {"Short (Quick Bullet Points)", "Medium (Detailed Highlights)", "Long (Comprehensive Deep Dive)"};
+    private final String[] debateTones = {"Main Facts & Balanced Analysis", "Satirical & Witty", "Economic & Market Focus", "Financial & Investor Angle", "Philosophical & Societal Impact"};
 
     private boolean showingNewTab = true;
     private String currentFullArticleText = "";
@@ -115,7 +118,7 @@ public class MainActivity extends AppCompatActivity {
 
         prefs = getSharedPreferences("SmartRSSPrefs", Context.MODE_PRIVATE);
 
-        // Views & Containers
+        // Views
         viewFeeds = findViewById(R.id.viewFeeds);
         viewArticles = findViewById(R.id.viewArticles);
         viewSettings = findViewById(R.id.viewSettings);
@@ -128,7 +131,7 @@ public class MainActivity extends AppCompatActivity {
         navSettings = findViewById(R.id.navSettings);
         navSummaries = findViewById(R.id.navSummaries);
 
-        // Article & Reader Controls
+        // Reader Controls
         btnBackToArticles = findViewById(R.id.btnBackToArticles);
         btnReadFullArticleAloud = findViewById(R.id.btnReadFullArticleAloud);
         readerTitle = findViewById(R.id.readerTitle);
@@ -150,6 +153,8 @@ public class MainActivity extends AppCompatActivity {
         spinnerLanguage = findViewById(R.id.spinnerLanguage);
         spinnerTtsVoice = findViewById(R.id.spinnerTtsVoice);
         spinnerRetention = findViewById(R.id.spinnerRetention);
+        spinnerDepth = findViewById(R.id.spinnerDepth);
+        spinnerDebateTone = findViewById(R.id.spinnerDebateTone);
         btnSaveApiKey = findViewById(R.id.btnSaveApiKey);
 
         // Sub Controls
@@ -157,22 +162,25 @@ public class MainActivity extends AppCompatActivity {
         btnTabRead = findViewById(R.id.btnTabRead);
         btnAddFeed = findViewById(R.id.btnAddFeed);
         btnSummarizeSelected = findViewById(R.id.btnSummarizeSelected);
+        btnDebateSelected = findViewById(R.id.btnDebateSelected);
         inputFeedUrl = findViewById(R.id.inputFeedUrl);
         statusText = findViewById(R.id.statusText);
         listFeeds = findViewById(R.id.listFeeds);
         recyclerArticles = findViewById(R.id.recyclerArticles);
         layoutAiBar = findViewById(R.id.layoutAiBar);
 
-        // RecyclerView Setup
+        // Setup RecyclerView
         recyclerArticles.setLayoutManager(new LinearLayoutManager(this));
         articleAdapter = new ArticleAdapter();
         recyclerArticles.setAdapter(articleAdapter);
 
-        // Spinners Setup
+        // Spinners Configuration
         spinnerLanguage.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, languages));
         spinnerRetention.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, retentionOptions));
+        spinnerDepth.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, depthOptions));
+        spinnerDebateTone.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, debateTones));
 
-        // Navigation Click Listeners
+        // Nav Click Listeners
         navFeeds.setOnClickListener(v -> switchView(viewFeeds));
         navArticles.setOnClickListener(v -> switchView(viewArticles));
         navSettings.setOnClickListener(v -> switchView(viewSettings));
@@ -208,7 +216,24 @@ public class MainActivity extends AppCompatActivity {
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        btnSummarizeSelected.setOnClickListener(v -> runAiSummary());
+        spinnerDepth.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                prefs.edit().putInt("depth_index", pos).apply();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        spinnerDebateTone.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                prefs.edit().putInt("debate_tone_index", pos).apply();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        btnSummarizeSelected.setOnClickListener(v -> runAiAction(false));
+        btnDebateSelected.setOnClickListener(v -> runAiAction(true));
 
         btnBackToArticles.setOnClickListener(v -> switchView(viewArticles));
         btnReadFullArticleAloud.setOnClickListener(v -> {
@@ -224,7 +249,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // TTS Engine Initialization
+        // Initialize Standalone System TTS Engine
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 populateTtsVoices();
@@ -249,7 +274,9 @@ public class MainActivity extends AppCompatActivity {
         inputApiKey.setText(prefs.getString("api_key", ""));
         switchAi.setChecked(prefs.getBoolean("ai_enabled", false));
         switchAutoMarkRead.setChecked(prefs.getBoolean("auto_mark_read", true));
-        spinnerRetention.setSelection(prefs.getInt("retention_index", 2)); // Default: 7 days
+        spinnerRetention.setSelection(prefs.getInt("retention_index", 2));
+        spinnerDepth.setSelection(prefs.getInt("depth_index", 1));
+        spinnerDebateTone.setSelection(prefs.getInt("debate_tone_index", 0));
         updateAiState();
     }
 
@@ -313,7 +340,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void renderFeedList() {
-        listFeeds.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, feedUrls));
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, feedUrls);
+        listFeeds.setAdapter(adapter);
+
+        // Long press to remove a feed
+        listFeeds.setOnItemLongClickListener((parent, view, position, id) -> {
+            String feedToRemove = feedUrls.get(position);
+            new AlertDialog.Builder(this)
+                    .setTitle("Remove Feed")
+                    .setMessage("Remove " + feedToRemove + "?\nThis will delete all articles from this feed.")
+                    .setPositiveButton("Remove", (dialog, which) -> {
+                        feedUrls.remove(position);
+                        prefs.edit().putStringSet("feed_list", new HashSet<>(feedUrls)).apply();
+                        masterArticles.removeIf(a -> a.feedUrl.equals(feedToRemove));
+                        renderFeedList();
+                        filterArticles();
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
+            return true;
+        });
     }
 
     private void fetchAllFeeds() {
@@ -335,7 +381,7 @@ public class MainActivity extends AppCompatActivity {
                         String desc = item.select("description").text();
 
                         if (!title.isEmpty()) {
-                            masterArticles.add(new Article(title, link, desc));
+                            masterArticles.add(new Article(title, link, desc, url));
                         }
                     }
                 } catch (Exception ignored) {}
@@ -352,7 +398,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyRetentionPolicy() {
         int index = prefs.getInt("retention_index", 2);
-        if (index == 3) return; // Keep Forever
+        if (index == 3) return;
 
         long daysInMillis = (index == 0 ? 1L : index == 1 ? 3L : 7L) * 24 * 60 * 60 * 1000;
         long now = System.currentTimeMillis();
@@ -380,7 +426,13 @@ public class MainActivity extends AppCompatActivity {
     private void updateSelectionCounter() {
         int count = 0;
         for (Article a : masterArticles) if (a.isSelected) count++;
-        btnSummarizeSelected.setText("Summarize Selected (" + count + ")");
+        btnSummarizeSelected.setText("Summarize (" + count + ")");
+        btnDebateSelected.setText("AI Debate (" + count + ")");
+    }
+
+    private boolean isAnyArticleSelected() {
+        for (Article a : masterArticles) if (a.isSelected) return true;
+        return false;
     }
 
     private void openCleanArticle(Article a) {
@@ -412,7 +464,7 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    private void runAiSummary() {
+    private void runAiAction(boolean isDebateMode) {
         String key = prefs.getString("api_key", "");
         if (key.isEmpty()) {
             Toast.makeText(this, "Set API Key in Settings first", Toast.LENGTH_SHORT).show();
@@ -420,7 +472,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         switchView(viewSummaries);
-        showSummaryDetail("Generating Summary...", "Extracting selected articles and contacting AI...");
+        showSummaryDetail(isDebateMode ? "Generating AI Debate..." : "Generating Summary...", "Fetching content and contacting AI...");
         summaryProgressBar.setVisibility(View.VISIBLE);
 
         new Thread(() -> {
@@ -453,10 +505,25 @@ public class MainActivity extends AppCompatActivity {
 
                 JSONArray msgs = new JSONArray();
                 String targetLang = languages[spinnerLanguage.getSelectedItemPosition()];
-                
-                String prompt = "Summarize these articles in " + targetLang + " using bullet points.\n" +
-                                "IMPORTANT: Format your response as valid JSON with two fields: 'title' (a short, concise 3-6 word summary title) and 'summary' (the full bulleted summary text).\n\n" +
-                                "Articles:\n" + payload.toString();
+                int depthIdx = prefs.getInt("depth_index", 1);
+                String depthConstraint = depthIdx == 0 ? "Keep it short and concise using tight bullet points." :
+                                         depthIdx == 1 ? "Provide a medium-length structured summary with detailed bullet points and key takeaways." :
+                                         "Provide a highly thorough, detailed deep dive with comprehensive analysis for every single article covered.";
+
+                String tone = debateTones[prefs.getInt("debate_tone_index", 0)];
+
+                String prompt;
+                if (isDebateMode) {
+                    prompt = "Generate a lively AI Debate between Speaker A and Speaker B based on these articles in " + targetLang + ".\n" +
+                             "The debate tone/perspective must be: " + tone + ".\n" +
+                             "IMPORTANT: Return ONLY a valid JSON object with keys 'title' (a short 3-6 word title for this debate) and 'content' (the complete transcript formatted cleanly with line breaks).\n\n" +
+                             "Articles:\n" + payload.toString();
+                } else {
+                    prompt = "Summarize these articles in " + targetLang + ".\n" +
+                             "Detail depth requested: " + depthConstraint + "\n" +
+                             "IMPORTANT: Return ONLY a valid JSON object with keys 'title' (a short 3-6 word title) and 'content' (the summary bullet points formatted cleanly with line breaks).\n\n" +
+                             "Articles:\n" + payload.toString();
+                }
 
                 msgs.put(new JSONObject().put("role", "user").put("content", prompt));
                 json.put("messages", msgs);
@@ -472,22 +539,32 @@ public class MainActivity extends AppCompatActivity {
                         String rawContent = new JSONObject(res.body().string())
                                 .getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
                         
-                        String parsedTitle = "News Summary";
-                        String parsedSummary = rawContent;
+                        String parsedTitle = isDebateMode ? "AI Debate" : "News Summary";
+                        String parsedContent = rawContent;
 
                         try {
-                            JSONObject parsedJson = new JSONObject(rawContent.substring(rawContent.indexOf("{"), rawContent.lastIndexOf("}") + 1));
-                            parsedTitle = parsedJson.optString("title", "News Summary");
-                            parsedSummary = parsedJson.optString("summary", rawContent);
+                            int firstBrace = rawContent.indexOf("{");
+                            int lastBrace = rawContent.lastIndexOf("}");
+                            if (firstBrace != -1 && lastBrace != -1) {
+                                JSONObject parsedJson = new JSONObject(rawContent.substring(firstBrace, lastBrace + 1));
+                                parsedTitle = parsedJson.optString("title", parsedTitle);
+                                parsedContent = parsedJson.optString("content", parsedJson.optString("summary", rawContent));
+                            }
                         } catch (Exception ignored) {}
 
+                        // Clean out trailing/leading structural artifacts for clean TTS speech
+                        parsedContent = parsedContent.replaceAll("^\\{\\s*\"content\":\\s*\"", "")
+                                                     .replaceAll("\"\\s*\\}$", "")
+                                                     .replace("\\n", "\n")
+                                                     .replace("\\\"", "\"");
+
                         String timestamp = new SimpleDateFormat("MMM dd, yyyy - HH:mm", Locale.getDefault()).format(new Date());
-                        SummaryItem newSummary = new SummaryItem(parsedTitle, timestamp, parsedSummary);
+                        SummaryItem newSummary = new SummaryItem((isDebateMode ? "[Debate] " : "") + parsedTitle, timestamp, parsedContent);
                         
                         savedSummaries.add(0, newSummary);
                         saveSummariesToPrefs();
 
-                        // Reset selection & optionally mark as read
+                        // Clear selections and mark read if requested
                         boolean autoMarkRead = prefs.getBoolean("auto_mark_read", true);
                         for (Article a : masterArticles) {
                             if (a.isSelected) {
@@ -500,11 +577,11 @@ public class MainActivity extends AppCompatActivity {
                         }
 
                         String finalTitle = parsedTitle;
-                        String finalSummary = parsedSummary;
+                        String finalContent = parsedContent;
                         runOnUiThread(() -> {
                             summaryProgressBar.setVisibility(View.GONE);
                             filterArticles();
-                            showSummaryDetail(finalTitle, finalSummary);
+                            showSummaryDetail(finalTitle, finalContent);
                         });
                     } else {
                         String err = res.body() != null ? res.body().string() : "Unknown response error";
@@ -517,13 +594,12 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     summaryProgressBar.setVisibility(View.GONE);
-                    showSummaryDetail("Failed", "Error generating summary: " + e.getLocalizedMessage());
+                    showSummaryDetail("Failed", "Error running AI action: " + e.getLocalizedMessage());
                 });
             }
         }).start();
     }
 
-    // Summary List Management
     private void showSummariesList() {
         summaryHeaderTitle.setText("Saved Summaries");
         btnBackToSummariesList.setVisibility(View.GONE);
@@ -546,8 +622,8 @@ public class MainActivity extends AppCompatActivity {
 
         listSummaries.setOnItemLongClickListener((parent, view, position, id) -> {
             new AlertDialog.Builder(this)
-                    .setTitle("Delete Summary")
-                    .setMessage("Do you want to delete this summary?")
+                    .setTitle("Delete Item")
+                    .setMessage("Do you want to delete this saved entry?")
                     .setPositiveButton("Delete", (dialog, which) -> {
                         savedSummaries.remove(position);
                         saveSummariesToPrefs();
@@ -600,7 +676,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception ignored) {}
     }
 
-    // Article Adapter
+    // Article Adapter with Improved Multi-Select Interactions
     class ArticleAdapter extends RecyclerView.Adapter<ArticleAdapter.ArticleHolder> {
 
         @NonNull
@@ -619,17 +695,24 @@ public class MainActivity extends AppCompatActivity {
             holder.checkBox.setVisibility(a.isSelected ? View.VISIBLE : View.GONE);
             holder.checkBox.setChecked(a.isSelected);
 
-            // Tap to open full in-app article reader
             holder.itemView.setOnClickListener(v -> {
-                if (!a.isRead) {
-                    a.isRead = true;
-                    a.readTimestamp = System.currentTimeMillis();
+                if (isAnyArticleSelected()) {
+                    // Selection mode is active: standard tap toggles items
+                    a.isSelected = !a.isSelected;
+                    notifyItemChanged(pos);
+                    updateSelectionCounter();
+                } else {
+                    // Standard tap opens full article reader
+                    if (!a.isRead) {
+                        a.isRead = true;
+                        a.readTimestamp = System.currentTimeMillis();
+                    }
+                    filterArticles();
+                    openCleanArticle(a);
                 }
-                filterArticles();
-                openCleanArticle(a);
             });
 
-            // Long-press to toggle selection for AI summary
+            // Long-press starts or toggles selection mode
             holder.itemView.setOnLongClickListener(v -> {
                 a.isSelected = !a.isSelected;
                 notifyItemChanged(pos);
