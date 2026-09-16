@@ -1,90 +1,205 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:padding="16dp">
+    android:layout_height="match_parent">
 
+    <!-- Section 1: Feeds Management View -->
     <LinearLayout
-        android:id="@+id/topBar"
+        android:id="@+id/viewFeeds"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:layout_height="match_parent"
+        android:layout_above="@id/bottomNav"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Switch
-                android:id="@+id/switchAiToggle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Enable AI Actions" />
-
-            <Spinner
-                android:id="@+id/languageSpinner"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
+            android:text="RSS Subscriptions"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp">
+            android:layout_marginTop="12dp">
 
             <EditText
-                android:id="@+id/rssUrlInput"
+                android:id="@+id/inputFeedUrl"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:hint="RSS Feed URL" />
+                android:hint="Add Feed URL..." />
 
             <Button
-                android:id="@+id/btnLoadFeed"
+                android:id="@+id/btnAddFeed"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Load" />
+                android:text="Add" />
+        </LinearLayout>
+
+        <ListView
+            android:id="@+id/listFeeds"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="12dp" />
+    </LinearLayout>
+
+    <!-- Section 2: Articles Reader View (New / Read) -->
+    <RelativeLayout
+        android:id="@+id/viewArticles"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/bottomNav"
+        android:padding="12dp">
+
+        <LinearLayout
+            android:id="@+id/articleHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnTabNew"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="New Articles" />
+
+            <Button
+                android:id="@+id/btnTabRead"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Read Articles" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/statusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:text="Feed Reader Ready."
+            android:layout_below="@id/articleHeader"
             android:textStyle="italic" />
-    </LinearLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerView"
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerArticles"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_below="@id/statusText"
+            android:layout_above="@id/layoutAiBar"
+            android:layout_marginTop="8dp" />
+
+        <LinearLayout
+            android:id="@+id/layoutAiBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/btnSummarizeSelected"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Summarize Selected (0)" />
+
+            <Button
+                android:id="@+id/btnSpeakSummary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Read Aloud" />
+        </LinearLayout>
+    </RelativeLayout>
+
+    <!-- Section 3: Settings View -->
+    <LinearLayout
+        android:id="@+id/viewSettings"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/topBar"
-        android:layout_above="@id/bottomActionBar"
-        android:layout_marginTop="8dp" />
+        android:layout_above="@id/bottomNav"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Settings"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/inputApiKey"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="OpenRouter API Key (sk-or-...)"
+            android:inputType="textPassword"
+            android:layout_marginTop="16dp" />
+
+        <Button
+            android:id="@+id/btnSaveApiKey"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Save API Key" />
+
+        <Switch
+            android:id="@+id/switchAi"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Enable AI Actions"
+            android:layout_marginTop="20dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="AI Output & TTS Language"
+            android:layout_marginTop="16dp" />
+
+        <Spinner
+            android:id="@+id/spinnerLanguage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+    </LinearLayout>
+
+    <!-- Bottom Navigation Tabs -->
     <LinearLayout
-        android:id="@+id/bottomActionBar"
+        android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:orientation="horizontal"
-        android:visibility="gone">
+        android:background="#1E1E1E">
 
         <Button
-            android:id="@+id/btnSummarizeSelected"
+            android:id="@+id/navFeeds"
+            style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Summarize Selected (0)" />
+            android:text="Feeds" />
 
         <Button
-            android:id="@+id/btnSpeakSummary"
-            android:layout_width="wrap_content"
+            android:id="@+id/navArticles"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Read Aloud" />
+            android:layout_weight="1"
+            android:text="Articles" />
+
+        <Button
+            android:id="@+id/navSettings"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Settings" />
     </LinearLayout>
 
 </RelativeLayout>
