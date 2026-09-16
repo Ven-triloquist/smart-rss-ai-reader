@@ -1,5 +1,6 @@
 package com.example.smartrssai;
 
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -16,6 +17,7 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -39,9 +41,12 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -51,6 +56,7 @@ public class MainActivity extends AppCompatActivity {
         String title, link, description;
         boolean isRead = false;
         boolean isSelected = false;
+        long readTimestamp = 0;
 
         Article(String title, String link, String description) {
             this.title = title;
@@ -59,16 +65,29 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public static class SummaryItem {
+        String title;
+        String timestamp;
+        String content;
+
+        SummaryItem(String title, String timestamp, String content) {
+            this.title = title;
+            this.timestamp = timestamp;
+            this.content = content;
+        }
+    }
+
     private View viewFeeds, viewArticles, viewSettings, viewReader, viewSummaries;
     private Button navFeeds, navArticles, navSettings, navSummaries;
     private Button btnTabNew, btnTabRead, btnAddFeed, btnSaveApiKey, btnSummarizeSelected;
-    private Button btnBackToArticles, btnReadFullArticleAloud, btnSpeakSummaryTab;
+    private Button btnBackToArticles, btnReadFullArticleAloud, btnSpeakSummaryTab, btnBackToSummariesList;
     private EditText inputFeedUrl, inputApiKey;
-    private Switch switchAi;
-    private Spinner spinnerLanguage, spinnerTtsVoice;
-    private TextView statusText, readerTitle, readerContent, textSummaryOutput;
+    private Switch switchAi, switchAutoMarkRead;
+    private Spinner spinnerLanguage, spinnerTtsVoice, spinnerRetention;
+    private TextView statusText, readerTitle, readerContent, textSummaryOutput, summaryHeaderTitle;
     private ProgressBar summaryProgressBar;
-    private ListView listFeeds;
+    private ListView listFeeds, listSummaries;
+    private ScrollView scrollSummaryDetail;
     private RecyclerView recyclerArticles;
     private LinearLayout layoutAiBar;
 
@@ -79,12 +98,15 @@ public class MainActivity extends AppCompatActivity {
     private final List<String> feedUrls = new ArrayList<>();
     private final List<Article> masterArticles = new ArrayList<>();
     private final List<Article> displayedArticles = new ArrayList<>();
+    private final List<SummaryItem> savedSummaries = new ArrayList<>();
     private final List<Voice> availableVoices = new ArrayList<>();
 
     private final String[] languages = {"English", "Spanish", "Dutch", "French", "German"};
+    private final String[] retentionOptions = {"1 Day", "3 Days", "7 Days", "Keep Forever"};
+
     private boolean showingNewTab = true;
     private String currentFullArticleText = "";
-    private String lastGeneratedSummary = "";
+    private String activeSummaryText = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -93,7 +115,7 @@ public class MainActivity extends AppCompatActivity {
 
         prefs = getSharedPreferences("SmartRSSPrefs", Context.MODE_PRIVATE);
 
-        // Sections
+        // Views & Containers
         viewFeeds = findViewById(R.id.viewFeeds);
         viewArticles = findViewById(R.id.viewArticles);
         viewSettings = findViewById(R.id.viewSettings);
@@ -106,46 +128,58 @@ public class MainActivity extends AppCompatActivity {
         navSettings = findViewById(R.id.navSettings);
         navSummaries = findViewById(R.id.navSummaries);
 
-        // Reader & Summary Controls
+        // Article & Reader Controls
         btnBackToArticles = findViewById(R.id.btnBackToArticles);
         btnReadFullArticleAloud = findViewById(R.id.btnReadFullArticleAloud);
-        btnSpeakSummaryTab = findViewById(R.id.btnSpeakSummaryTab);
         readerTitle = findViewById(R.id.readerTitle);
         readerContent = findViewById(R.id.readerContent);
-        textSummaryOutput = findViewById(R.id.textSummaryOutput);
+
+        // Summary View Controls
+        btnBackToSummariesList = findViewById(R.id.btnBackToSummariesList);
+        btnSpeakSummaryTab = findViewById(R.id.btnSpeakSummaryTab);
+        summaryHeaderTitle = findViewById(R.id.summaryHeaderTitle);
         summaryProgressBar = findViewById(R.id.summaryProgressBar);
+        listSummaries = findViewById(R.id.listSummaries);
+        scrollSummaryDetail = findViewById(R.id.scrollSummaryDetail);
+        textSummaryOutput = findViewById(R.id.textSummaryOutput);
+
+        // Settings Controls
+        inputApiKey = findViewById(R.id.inputApiKey);
+        switchAi = findViewById(R.id.switchAi);
+        switchAutoMarkRead = findViewById(R.id.switchAutoMarkRead);
+        spinnerLanguage = findViewById(R.id.spinnerLanguage);
+        spinnerTtsVoice = findViewById(R.id.spinnerTtsVoice);
+        spinnerRetention = findViewById(R.id.spinnerRetention);
+        btnSaveApiKey = findViewById(R.id.btnSaveApiKey);
 
         // Sub Controls
         btnTabNew = findViewById(R.id.btnTabNew);
         btnTabRead = findViewById(R.id.btnTabRead);
         btnAddFeed = findViewById(R.id.btnAddFeed);
-        btnSaveApiKey = findViewById(R.id.btnSaveApiKey);
         btnSummarizeSelected = findViewById(R.id.btnSummarizeSelected);
-
         inputFeedUrl = findViewById(R.id.inputFeedUrl);
-        inputApiKey = findViewById(R.id.inputApiKey);
-        switchAi = findViewById(R.id.switchAi);
-        spinnerLanguage = findViewById(R.id.spinnerLanguage);
-        spinnerTtsVoice = findViewById(R.id.spinnerTtsVoice);
         statusText = findViewById(R.id.statusText);
         listFeeds = findViewById(R.id.listFeeds);
         recyclerArticles = findViewById(R.id.recyclerArticles);
         layoutAiBar = findViewById(R.id.layoutAiBar);
 
-        // Setup RecyclerView
+        // RecyclerView Setup
         recyclerArticles.setLayoutManager(new LinearLayoutManager(this));
         articleAdapter = new ArticleAdapter();
         recyclerArticles.setAdapter(articleAdapter);
 
-        // Setup Target Language Spinner
-        ArrayAdapter<String> langAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, languages);
-        spinnerLanguage.setAdapter(langAdapter);
+        // Spinners Setup
+        spinnerLanguage.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, languages));
+        spinnerRetention.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, retentionOptions));
 
-        // Nav Listeners
+        // Navigation Click Listeners
         navFeeds.setOnClickListener(v -> switchView(viewFeeds));
         navArticles.setOnClickListener(v -> switchView(viewArticles));
         navSettings.setOnClickListener(v -> switchView(viewSettings));
-        navSummaries.setOnClickListener(v -> switchView(viewSummaries));
+        navSummaries.setOnClickListener(v -> {
+            showSummariesList();
+            switchView(viewSummaries);
+        });
 
         // Tabs
         btnTabNew.setOnClickListener(v -> { showingNewTab = true; filterArticles(); });
@@ -155,9 +189,23 @@ public class MainActivity extends AppCompatActivity {
 
         btnAddFeed.setOnClickListener(v -> addFeed());
         btnSaveApiKey.setOnClickListener(v -> saveApiKey());
+        
         switchAi.setOnCheckedChangeListener((btn, isChecked) -> {
             prefs.edit().putBoolean("ai_enabled", isChecked).apply();
             updateAiState();
+        });
+
+        switchAutoMarkRead.setOnCheckedChangeListener((btn, isChecked) -> 
+            prefs.edit().putBoolean("auto_mark_read", isChecked).apply()
+        );
+
+        spinnerRetention.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                prefs.edit().putInt("retention_index", pos).apply();
+                applyRetentionPolicy();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
 
         btnSummarizeSelected.setOnClickListener(v -> runAiSummary());
@@ -169,19 +217,21 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        btnBackToSummariesList.setOnClickListener(v -> showSummariesList());
         btnSpeakSummaryTab.setOnClickListener(v -> {
-            if (tts != null && !lastGeneratedSummary.isEmpty()) {
-                tts.speak(lastGeneratedSummary, TextToSpeech.QUEUE_FLUSH, null, null);
+            if (tts != null && !activeSummaryText.isEmpty()) {
+                tts.speak(activeSummaryText, TextToSpeech.QUEUE_FLUSH, null, null);
             }
         });
 
-        // Initialize Standalone System TTS Engine
+        // TTS Engine Initialization
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 populateTtsVoices();
             }
         });
 
+        loadSavedSummaries();
         switchView(viewArticles);
         loadSavedFeeds();
     }
@@ -198,6 +248,8 @@ public class MainActivity extends AppCompatActivity {
     private void loadSettings() {
         inputApiKey.setText(prefs.getString("api_key", ""));
         switchAi.setChecked(prefs.getBoolean("ai_enabled", false));
+        switchAutoMarkRead.setChecked(prefs.getBoolean("auto_mark_read", true));
+        spinnerRetention.setSelection(prefs.getInt("retention_index", 2)); // Default: 7 days
         updateAiState();
     }
 
@@ -226,9 +278,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, voiceNames);
-        spinnerTtsVoice.setAdapter(adapter);
-
+        spinnerTtsVoice.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, voiceNames));
         spinnerTtsVoice.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -236,9 +286,7 @@ public class MainActivity extends AppCompatActivity {
                     tts.setVoice(availableVoices.get(position));
                 }
             }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
     }
 
@@ -265,11 +313,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void renderFeedList() {
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, feedUrls);
-        listFeeds.setAdapter(adapter);
+        listFeeds.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, feedUrls));
     }
 
     private void fetchAllFeeds() {
+        statusText.setAlpha(1.0f);
         statusText.setText("Updating feeds...");
         masterArticles.clear();
 
@@ -294,19 +342,37 @@ public class MainActivity extends AppCompatActivity {
             }
 
             runOnUiThread(() -> {
-                statusText.setText("Loaded " + masterArticles.size() + " items.");
+                applyRetentionPolicy();
                 filterArticles();
+                statusText.setText("Loaded " + masterArticles.size() + " items.");
+                statusText.animate().alpha(0.0f).setDuration(3000).start();
             });
         }).start();
     }
 
+    private void applyRetentionPolicy() {
+        int index = prefs.getInt("retention_index", 2);
+        if (index == 3) return; // Keep Forever
+
+        long daysInMillis = (index == 0 ? 1L : index == 1 ? 3L : 7L) * 24 * 60 * 60 * 1000;
+        long now = System.currentTimeMillis();
+
+        masterArticles.removeIf(a -> a.isRead && (now - a.readTimestamp > daysInMillis));
+    }
+
     private void filterArticles() {
         displayedArticles.clear();
+        int newCount = 0, readCount = 0;
+
         for (Article a : masterArticles) {
+            if (a.isRead) readCount++; else newCount++;
             if (a.isRead != showingNewTab) {
                 displayedArticles.add(a);
             }
         }
+
+        btnTabNew.setText("New Articles (" + newCount + ")");
+        btnTabRead.setText("Read Articles (" + readCount + ")");
         articleAdapter.notifyDataSetChanged();
         updateSelectionCounter();
     }
@@ -317,7 +383,6 @@ public class MainActivity extends AppCompatActivity {
         btnSummarizeSelected.setText("Summarize Selected (" + count + ")");
     }
 
-    // Fixed Article Content Scraper
     private void openCleanArticle(Article a) {
         switchView(viewReader);
         readerTitle.setText(a.title);
@@ -326,29 +391,20 @@ public class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 Document doc = Jsoup.connect(a.link).userAgent("Mozilla/5.0").timeout(8000).get();
-                // Strip non-content elements
                 doc.select("script, style, nav, header, footer, iframe, .ads, .comments, .sidebar, .related, aside, .trending").remove();
 
-                // Target article containers directly first
                 Elements container = doc.select("article, .entry-content, .post-content, .article-body, #content");
-                Elements paragraphs;
-                if (!container.isEmpty()) {
-                    paragraphs = container.select("p");
-                } else {
-                    paragraphs = doc.select("p");
-                }
+                Elements paragraphs = !container.isEmpty() ? container.select("p") : doc.select("p");
 
                 StringBuilder cleanText = new StringBuilder();
                 for (Element p : paragraphs) {
                     String text = p.text().trim();
-                    // Filters out short side menu titles or UI snippet links
                     if (text.length() > 40) {
                         cleanText.append(text).append("\n\n");
                     }
                 }
 
                 currentFullArticleText = cleanText.length() > 0 ? cleanText.toString() : Jsoup.parse(a.description).text();
-
                 runOnUiThread(() -> readerContent.setText(currentFullArticleText));
             } catch (Exception e) {
                 runOnUiThread(() -> readerContent.setText("Failed to extract full article text.\nLink: " + a.link));
@@ -356,7 +412,6 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    // Fixed OpenRouter API Endpoint Target
     private void runAiSummary() {
         String key = prefs.getString("api_key", "");
         if (key.isEmpty()) {
@@ -365,8 +420,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         switchView(viewSummaries);
+        showSummaryDetail("Generating Summary...", "Extracting selected articles and contacting AI...");
         summaryProgressBar.setVisibility(View.VISIBLE);
-        textSummaryOutput.setText("Extracting selected articles & requesting summary...");
 
         new Thread(() -> {
             try {
@@ -394,13 +449,16 @@ public class MainActivity extends AppCompatActivity {
                         .build();
 
                 JSONObject json = new JSONObject();
-                // Valid OpenRouter model identifiers
                 json.put("model", "anthropic/claude-3-haiku");
 
                 JSONArray msgs = new JSONArray();
                 String targetLang = languages[spinnerLanguage.getSelectedItemPosition()];
-                msgs.put(new JSONObject().put("role", "system").put("content", "Summarize these articles in " + targetLang + " using clear bullet points."));
-                msgs.put(new JSONObject().put("role", "user").put("content", payload.toString()));
+                
+                String prompt = "Summarize these articles in " + targetLang + " using bullet points.\n" +
+                                "IMPORTANT: Format your response as valid JSON with two fields: 'title' (a short, concise 3-6 word summary title) and 'summary' (the full bulleted summary text).\n\n" +
+                                "Articles:\n" + payload.toString();
+
+                msgs.put(new JSONObject().put("role", "user").put("content", prompt));
                 json.put("messages", msgs);
 
                 Request req = new Request.Builder()
@@ -411,28 +469,135 @@ public class MainActivity extends AppCompatActivity {
 
                 try (Response res = client.newCall(req).execute()) {
                     if (res.isSuccessful() && res.body() != null) {
-                        lastGeneratedSummary = new JSONObject(res.body().string())
+                        String rawContent = new JSONObject(res.body().string())
                                 .getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
                         
+                        String parsedTitle = "News Summary";
+                        String parsedSummary = rawContent;
+
+                        try {
+                            JSONObject parsedJson = new JSONObject(rawContent.substring(rawContent.indexOf("{"), rawContent.lastIndexOf("}") + 1));
+                            parsedTitle = parsedJson.optString("title", "News Summary");
+                            parsedSummary = parsedJson.optString("summary", rawContent);
+                        } catch (Exception ignored) {}
+
+                        String timestamp = new SimpleDateFormat("MMM dd, yyyy - HH:mm", Locale.getDefault()).format(new Date());
+                        SummaryItem newSummary = new SummaryItem(parsedTitle, timestamp, parsedSummary);
+                        
+                        savedSummaries.add(0, newSummary);
+                        saveSummariesToPrefs();
+
+                        // Reset selection & optionally mark as read
+                        boolean autoMarkRead = prefs.getBoolean("auto_mark_read", true);
+                        for (Article a : masterArticles) {
+                            if (a.isSelected) {
+                                a.isSelected = false;
+                                if (autoMarkRead) {
+                                    a.isRead = true;
+                                    a.readTimestamp = System.currentTimeMillis();
+                                }
+                            }
+                        }
+
+                        String finalTitle = parsedTitle;
+                        String finalSummary = parsedSummary;
                         runOnUiThread(() -> {
                             summaryProgressBar.setVisibility(View.GONE);
-                            textSummaryOutput.setText(lastGeneratedSummary);
+                            filterArticles();
+                            showSummaryDetail(finalTitle, finalSummary);
                         });
                     } else {
                         String err = res.body() != null ? res.body().string() : "Unknown response error";
                         runOnUiThread(() -> {
                             summaryProgressBar.setVisibility(View.GONE);
-                            textSummaryOutput.setText("API Error (" + res.code() + "): " + err);
+                            showSummaryDetail("API Error", "Error (" + res.code() + "): " + err);
                         });
                     }
                 }
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     summaryProgressBar.setVisibility(View.GONE);
-                    textSummaryOutput.setText("Failed to generate summary: " + e.getLocalizedMessage());
+                    showSummaryDetail("Failed", "Error generating summary: " + e.getLocalizedMessage());
                 });
             }
         }).start();
+    }
+
+    // Summary List Management
+    private void showSummariesList() {
+        summaryHeaderTitle.setText("Saved Summaries");
+        btnBackToSummariesList.setVisibility(View.GONE);
+        btnSpeakSummaryTab.setVisibility(View.GONE);
+        scrollSummaryDetail.setVisibility(View.GONE);
+        listSummaries.setVisibility(View.VISIBLE);
+
+        List<String> listLabels = new ArrayList<>();
+        for (SummaryItem s : savedSummaries) {
+            listLabels.add(s.title + "\n" + s.timestamp);
+        }
+
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, listLabels);
+        listSummaries.setAdapter(adapter);
+
+        listSummaries.setOnItemClickListener((parent, view, position, id) -> {
+            SummaryItem item = savedSummaries.get(position);
+            showSummaryDetail(item.title, item.content);
+        });
+
+        listSummaries.setOnItemLongClickListener((parent, view, position, id) -> {
+            new AlertDialog.Builder(this)
+                    .setTitle("Delete Summary")
+                    .setMessage("Do you want to delete this summary?")
+                    .setPositiveButton("Delete", (dialog, which) -> {
+                        savedSummaries.remove(position);
+                        saveSummariesToPrefs();
+                        showSummariesList();
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
+            return true;
+        });
+    }
+
+    private void showSummaryDetail(String title, String content) {
+        summaryHeaderTitle.setText(title);
+        activeSummaryText = content;
+        textSummaryOutput.setText(content);
+
+        btnBackToSummariesList.setVisibility(View.VISIBLE);
+        btnSpeakSummaryTab.setVisibility(View.VISIBLE);
+        listSummaries.setVisibility(View.GONE);
+        scrollSummaryDetail.setVisibility(View.VISIBLE);
+    }
+
+    private void saveSummariesToPrefs() {
+        try {
+            JSONArray arr = new JSONArray();
+            for (SummaryItem item : savedSummaries) {
+                JSONObject obj = new JSONObject();
+                obj.put("title", item.title);
+                obj.put("timestamp", item.timestamp);
+                obj.put("content", item.content);
+                arr.put(obj);
+            }
+            prefs.edit().putString("saved_summaries_json", arr.toString()).apply();
+        } catch (Exception ignored) {}
+    }
+
+    private void loadSavedSummaries() {
+        savedSummaries.clear();
+        String jsonStr = prefs.getString("saved_summaries_json", "[]");
+        try {
+            JSONArray arr = new JSONArray(jsonStr);
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject obj = arr.getJSONObject(i);
+                savedSummaries.add(new SummaryItem(
+                        obj.getString("title"),
+                        obj.getString("timestamp"),
+                        obj.getString("content")
+                ));
+            }
+        } catch (Exception ignored) {}
     }
 
     // Article Adapter
@@ -456,7 +621,10 @@ public class MainActivity extends AppCompatActivity {
 
             // Tap to open full in-app article reader
             holder.itemView.setOnClickListener(v -> {
-                a.isRead = true;
+                if (!a.isRead) {
+                    a.isRead = true;
+                    a.readTimestamp = System.currentTimeMillis();
+                }
                 filterArticles();
                 openCleanArticle(a);
             });
