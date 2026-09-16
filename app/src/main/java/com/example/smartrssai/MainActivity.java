@@ -1,7 +1,10 @@
 package com.example.smartrssai;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
+import android.util.Xml;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -13,6 +16,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.xmlpull.v1.XmlPullParser;
 
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -20,94 +24,213 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
+import java.io.InputStream;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
+    static class RssArticle {
+        String title;
+        String link;
+        String description;
+        boolean isRead = false;
+
+        RssArticle(String title, String link, String description) {
+            this.title = title;
+            this.link = link;
+            this.description = description;
+        }
+    }
+
     private EditText apiKeyInput, rssUrlInput;
     private Spinner languageSpinner;
-    private TextView statusText, summaryText;
-    private Button btnLoadFeed, btnSummarize, btnSpeak;
+    private TextView statusText, contentDisplay;
+    private Button btnSaveKey, btnLoadFeed, btnSummarize, btnSpeak, btnTabNew, btnTabRead;
     private TextToSpeech tts;
 
+    private final List<RssArticle> articleList = new ArrayList<>();
     private final String[] languages = {"English", "Spanish", "Dutch", "French", "German"};
     private final String[] langCodes = {"en", "es", "nl", "fr", "de"};
+    
+    private SharedPreferences prefs;
+    private static final String PREF_KEY = "openrouter_api_key";
+    private boolean showingNewTab = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        prefs = getSharedPreferences("SmartRSSSettings", Context.MODE_PRIVATE);
+
         apiKeyInput = findViewById(R.id.apiKeyInput);
         rssUrlInput = findViewById(R.id.rssUrlInput);
         languageSpinner = findViewById(R.id.languageSpinner);
         statusText = findViewById(R.id.statusText);
-        summaryText = findViewById(R.id.summaryText);
+        contentDisplay = findViewById(R.id.contentDisplay);
+        
+        btnSaveKey = findViewById(R.id.btnSaveKey);
         btnLoadFeed = findViewById(R.id.btnLoadFeed);
         btnSummarize = findViewById(R.id.btnSummarize);
         btnSpeak = findViewById(R.id.btnSpeak);
+        btnTabNew = findViewById(R.id.btnTabNew);
+        btnTabRead = findViewById(R.id.btnTabRead);
 
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, languages);
         languageSpinner.setAdapter(adapter);
 
-        tts = new TextToSpeech(this, status -> {
-            if (status != TextToSpeech.ERROR) {
-                updateTtsLanguage();
-            }
+        // Load saved API Key if available
+        String savedKey = prefs.getString(PREF_KEY, "");
+        if (!savedKey.isEmpty()) {
+            apiKeyInput.setText(savedKey);
+            btnSummarize.setEnabled(true);
+        }
+
+        btnSaveKey.setOnClickListener(v -> saveApiKey());
+        btnLoadFeed.setOnClickListener(v -> fetchRssFeed());
+        btnSummarize.setOnClickListener(v -> processAiSummary());
+        btnSpeak.setOnClickListener(v -> speakContent());
+
+        btnTabNew.setOnClickListener(v -> {
+            showingNewTab = true;
+            renderArticles();
         });
 
-        btnLoadFeed.setOnClickListener(v -> loadRssFeed());
-        btnSummarize.setOnClickListener(v -> processAiSummary());
-        btnSpeak.setOnClickListener(v -> speakSummary());
+        btnTabRead.setOnClickListener(v -> {
+            showingNewTab = false;
+            renderArticles();
+        });
+
+        tts = new TextToSpeech(this, status -> {
+            if (status != TextToSpeech.ERROR) {
+                tts.setLanguage(Locale.US);
+            }
+        });
     }
 
-    private void loadRssFeed() {
-        String url = rssUrlInput.getText().toString();
-        statusText.setText("Loading feed header...");
+    private void saveApiKey() {
+        String key = apiKeyInput.getText().toString().trim();
+        prefs.edit().putString(PREF_KEY, key).apply();
+        btnSummarize.setEnabled(!key.isEmpty());
+        statusText.setText(key.isEmpty() ? "API Key cleared. AI Summarize disabled." : "API Key saved in Settings.");
+    }
+
+    private void fetchRssFeed() {
+        String urlString = rssUrlInput.getText().toString().trim();
+        if (urlString.isEmpty()) return;
+
+        statusText.setText("Fetching RSS XML feed...");
+        articleList.clear();
 
         new Thread(() -> {
-            try {
-                Document doc = Jsoup.connect(url).get();
-                String title = doc.select("title").first() != null ? doc.select("title").first().text() : "RSS Feed";
-                runOnUiThread(() -> statusText.setText("Loaded: " + title + ". Tap 'AI Summarize' to pull full article content."));
+            try (InputStream in = new URL(urlString).openStream()) {
+                XmlPullParser parser = Xml.newPullParser();
+                parser.setInput(in, null);
+
+                int eventType = parser.getEventType();
+                String currentTitle = "", currentLink = "", currentDesc = "";
+                boolean insideItem = false;
+
+                while (eventType != XmlPullParser.END_DOCUMENT) {
+                    String tagName = parser.getName();
+                    if (eventType == XmlPullParser.START_TAG) {
+                        if ("item".equalsIgnoreCase(tagName)) {
+                            insideItem = true;
+                        } else if (insideItem) {
+                            if ("title".equalsIgnoreCase(tagName)) currentTitle = parser.nextText();
+                            else if ("link".equalsIgnoreCase(tagName)) currentLink = parser.nextText();
+                            else if ("description".equalsIgnoreCase(tagName)) currentDesc = parser.nextText();
+                        }
+                    } else if (eventType == XmlPullParser.END_TAG && "item".equalsIgnoreCase(tagName)) {
+                        insideItem = false;
+                        articleList.add(new RssArticle(currentTitle, currentLink, currentDesc));
+                        currentTitle = ""; currentLink = ""; currentDesc = "";
+                    }
+                    eventType = parser.next();
+                }
+
+                runOnUiThread(() -> {
+                    statusText.setText("Loaded " + articleList.size() + " articles.");
+                    renderArticles();
+                });
             } catch (Exception e) {
-                runOnUiThread(() -> statusText.setText("Error loading feed: " + e.getMessage()));
+                runOnUiThread(() -> statusText.setText("RSS Load Error: " + e.getMessage()));
             }
         }).start();
     }
 
-    private void processAiSummary() {
-        String apiKey = apiKeyInput.getText().toString().trim();
-        String url = rssUrlInput.getText().toString().trim();
-        int selectedLangIndex = languageSpinner.getSelectedItemPosition();
-        String targetLang = languages[selectedLangIndex];
+    private void renderArticles() {
+        StringBuilder sb = new StringBuilder();
+        int count = 0;
 
+        for (int i = 0; i < articleList.size(); i++) {
+            RssArticle article = articleList.get(i);
+            if (article.isRead != showingNewTab) {
+                count++;
+                sb.append(count).append(". ").append(article.title).append("\n");
+                if (article.description != null && !article.description.isEmpty()) {
+                    String cleanSnippet = Jsoup.parse(article.description).text();
+                    sb.append(cleanSnippet).append("\n");
+                }
+                sb.append("Source: ").append(article.link).append("\n\n---\n\n");
+            }
+        }
+
+        if (count == 0) {
+            sb.append("No articles in ").append(showingNewTab ? "'New'" : "'Read'").append(" section.");
+        }
+
+        contentDisplay.setText(sb.toString());
+    }
+
+    private void processAiSummary() {
+        String apiKey = prefs.getString(PREF_KEY, "").trim();
         if (apiKey.isEmpty()) {
-            statusText.setText("Please enter your OpenRouter API Key.");
+            statusText.setText("Please save a valid OpenRouter API Key first.");
             return;
         }
 
-        statusText.setText("Fetching full article content & calling AI...");
+        int selectedIndex = languageSpinner.getSelectedItemPosition();
+        String targetLang = languages[selectedIndex];
+
+        statusText.setText("Extracting article text & invoking AI...");
 
         new Thread(() -> {
             try {
-                Document doc = Jsoup.connect(url).get();
-                String fullBodyText = doc.body().text();
-                String sampleText = fullBodyText.length() > 3000 ? fullBodyText.substring(0, 3000) : fullBodyText;
+                StringBuilder articlesContext = new StringBuilder();
+                int processedCount = 0;
+
+                for (RssArticle article : articleList) {
+                    if (!article.isRead) {
+                        Document doc = Jsoup.connect(article.link).userAgent("Mozilla/5.0").get();
+                        String bodyText = doc.body().text();
+                        String truncated = bodyText.length() > 1500 ? bodyText.substring(0, 1500) : bodyText;
+
+                        articlesContext.append("Title: ").append(article.title).append("\n")
+                                        .append("Content: ").append(truncated).append("\n\n");
+                        
+                        article.isRead = true; // Move to Read after parsing
+                        processedCount++;
+                        if (processedCount >= 5) break; // Limit payload context size
+                    }
+                }
 
                 OkHttpClient client = new OkHttpClient();
                 JSONObject jsonBody = new JSONObject();
                 jsonBody.put("model", "anthropic/claude-3.5-haiku");
 
                 JSONArray messages = new JSONArray();
-                JSONObject systemMsg = new JSONObject();
-                systemMsg.put("role", "system");
-                systemMsg.put("content", "You are an expert news editor. Summarize the provided articles in " + targetLang + ". Provide key insights, connection points, and bullet points.");
-                messages.put(systemMsg);
+                JSONObject sysMsg = new JSONObject();
+                sysMsg.put("role", "system");
+                sysMsg.put("content", "Summarize these news articles in " + targetLang + ". Provide key points and synthesized insights.");
+                messages.put(sysMsg);
 
                 JSONObject userMsg = new JSONObject();
                 userMsg.put("role", "user");
-                userMsg.put("content", sampleText);
+                userMsg.put("content", articlesContext.toString());
                 messages.put(userMsg);
 
                 jsonBody.put("messages", messages);
@@ -125,41 +248,36 @@ public class MainActivity extends AppCompatActivity {
 
                 try (Response response = client.newCall(request).execute()) {
                     if (response.isSuccessful() && response.body() != null) {
-                        String resStr = response.body().string();
-                        JSONObject resJson = new JSONObject(resStr);
+                        JSONObject resJson = new JSONObject(response.body().string());
                         String aiOutput = resJson.getJSONArray("choices")
                                 .getJSONObject(0)
                                 .getJSONObject("message")
                                 .getString("content");
 
                         runOnUiThread(() -> {
-                            statusText.setText("Summary Complete (" + targetLang + ")");
-                            summaryText.setText(aiOutput);
+                            statusText.setText("Summary Complete (" + targetLang + "). Articles moved to Read.");
+                            contentDisplay.setText(aiOutput);
                         });
                     } else {
-                        runOnUiThread(() -> statusText.setText("API Error: " + response.code()));
+                        int code = response.code();
+                        runOnUiThread(() -> statusText.setText("API Error: " + code + " (Check OpenRouter Key/Credits)"));
                     }
                 }
             } catch (Exception e) {
-                runOnUiThread(() -> statusText.setText("Failed: " + e.getMessage()));
+                runOnUiThread(() -> statusText.setText("Summary Error: " + e.getMessage()));
             }
         }).start();
     }
 
-    private void updateTtsLanguage() {
+    private void speakContent() {
         int selectedIndex = languageSpinner.getSelectedItemPosition();
-        String code = langCodes[selectedIndex];
-        Locale locale = new Locale(code);
+        Locale locale = new Locale(langCodes[selectedIndex]);
         if (tts != null) {
             tts.setLanguage(locale);
-        }
-    }
-
-    private void speakSummary() {
-        updateTtsLanguage();
-        String text = summaryText.getText().toString();
-        if (!text.isEmpty()) {
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
+            String text = contentDisplay.getText().toString();
+            if (!text.isEmpty()) {
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
+            }
         }
     }
 
