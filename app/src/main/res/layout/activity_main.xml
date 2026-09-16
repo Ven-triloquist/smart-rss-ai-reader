@@ -155,10 +155,11 @@
             android:text="Enable AI Actions"
             android:layout_marginTop="20dp" />
 
+        <!-- Fixed XML Entity issue on this element -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="AI Output & TTS Language"
+            android:text="AI Output &amp; TTS Language"
             android:layout_marginTop="16dp" />
 
         <Spinner
