@@ -1,228 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
 
-    <!-- Section 1: Feeds View -->
+    <!-- Top Navigation Bar -->
     <LinearLayout
-        android:id="@+id/viewFeeds"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@id/bottomNav"
-        android:orientation="vertical"
-        android:padding="16dp"
-        android:visibility="gone">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="RSS Subscriptions"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Tip: Long-press a feed to remove it."
-            android:textColor="#888888"
-            android:textSize="12sp"
-            android:layout_marginTop="2dp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="10dp">
-
-            <EditText
-                android:id="@+id/inputFeedUrl"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:hint="Add Custom Feed URL..." />
-
-            <Button
-                android:id="@+id/btnAddFeed"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Add" />
-        </LinearLayout>
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="4">
 
         <Button
-            android:id="@+id/btnDiscoverFeeds"
-            android:layout_width="match_parent"
+            android:id="@+id/navArticles"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="🌐 Discover Feeds by Country"
-            android:layout_marginTop="6dp" />
-
-        <ListView
-            android:id="@+id/listFeeds"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_marginTop="8dp" />
-    </LinearLayout>
-
-    <!-- Section 2: Articles List View -->
-    <RelativeLayout
-        android:id="@+id/viewArticles"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@id/bottomNav"
-        android:padding="12dp">
-
-        <LinearLayout
-            android:id="@+id/articleHeader"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btnTabNew"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="New Articles" />
-
-            <Button
-                android:id="@+id/btnTabRead"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Read Articles" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/articleHeader"
-            android:textStyle="italic" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recyclerArticles"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_below="@id/statusText"
-            android:layout_above="@id/layoutAiBar"
-            android:layout_marginTop="8dp" />
-
-        <LinearLayout
-            android:id="@+id/layoutAiBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true"
-            android:orientation="horizontal"
-            android:padding="4dp">
-
-            <Button
-                android:id="@+id/btnSummarizeSelected"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Summarize (0)" />
-
-            <Button
-                android:id="@+id/btnDebateSelected"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="4dp"
-                android:text="AI Debate (0)" />
-        </LinearLayout>
-    </RelativeLayout>
-
-    <!-- Section 3: Reader View -->
-    <LinearLayout
-        android:id="@+id/viewReader"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@id/bottomNav"
-        android:orientation="vertical"
-        android:padding="16dp"
-        android:visibility="gone">
+            android:layout_weight="1"
+            android:text="Articles" />
 
         <Button
-            android:id="@+id/btnBackToArticles"
-            android:layout_width="wrap_content"
+            android:id="@+id/navFeeds"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Back to Articles" />
+            android:layout_weight="1"
+            android:text="Feeds" />
 
-        <!-- Media Player Controls Bar for Articles -->
-        <LinearLayout
-            android:id="@+id/readerMediaControls"
-            android:layout_width="match_parent"
+        <Button
+            android:id="@+id/navSummaries"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:background="#2B2B2B"
-            android:padding="8dp"
-            android:layout_marginTop="8dp">
+            android:layout_weight="1"
+            android:text="Summaries" />
 
-            <Button
-                android:id="@+id/btnReaderRewind"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="⏪ -10s" />
-
-            <Button
-                android:id="@+id/btnReaderPlayPause"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:text="▶ Play" />
-
-            <Button
-                android:id="@+id/btnReaderFastForward"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:text="⏩ +10s" />
-
-            <Button
-                android:id="@+id/btnReaderStop"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:text="⏹ Stop" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/readerTitle"
-            android:layout_width="match_parent"
+        <Button
+            android:id="@+id/navSettings"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginTop="8dp" />
-
-        <ScrollView
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_marginTop="8dp">
-
-            <TextView
-                android:id="@+id/readerContent"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textSize="15sp"
-                android:lineSpacingExtra="4dp" />
-        </ScrollView>
+            android:layout_weight="1"
+            android:text="Settings" />
     </LinearLayout>
 
-    <!-- Section 4: Summaries View -->
-    <RelativeLayout
-        android:id="@+id/viewSummaries"
+    <TextView
+        android:id="@+id/statusText"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@id/bottomNav"
-        android:padding="16dp"
-        android:visibility="gone">
+        android:layout_height="wrap_content"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:text="Status: Ready"
+        android:textSize="12sp" />
 
+    <!-- Main Content Container -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Articles View -->
         <LinearLayout
-            android:id="@+id/summaryHeader"
+            android:id="@+id/viewArticles"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:orientation="vertical">
 
             <LinearLayout
@@ -231,246 +69,361 @@
                 android:orientation="horizontal">
 
                 <Button
-                    android:id="@+id/btnBackToSummariesList"
-                    android:layout_width="wrap_content"
+                    android:id="@+id/btnTabNew"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Back"
-                    android:visibility="gone" />
+                    android:layout_weight="1"
+                    android:text="New Articles" />
 
-                <TextView
-                    android:id="@+id/summaryHeaderTitle"
-                    android:layout_width="match_parent"
+                <Button
+                    android:id="@+id/btnTabRead"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Saved Summaries"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_gravity="center_vertical"
-                    android:layout_marginStart="8dp" />
+                    android:layout_weight="1"
+                    android:text="Read Articles" />
             </LinearLayout>
 
-            <!-- Media Player Controls Bar for Summaries & Debates -->
+            <!-- AI Action Bar with Selection Button -->
             <LinearLayout
-                android:id="@+id/summaryMediaControls"
+                android:id="@+id/layoutAiBar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:gravity="center"
-                android:background="#2B2B2B"
-                android:padding="6dp"
-                android:layout_marginTop="8dp"
-                android:visibility="gone">
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
 
                 <Button
-                    android:id="@+id/btnSummaryRewind"
+                    android:id="@+id/btnSelectAllArticles"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="⏪ -10s" />
+                    android:text="Select All"
+                    android:visibility="gone" />
 
                 <Button
-                    android:id="@+id/btnSummaryPlayPause"
-                    android:layout_width="wrap_content"
+                    android:id="@+id/btnSummarizeSelected"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
-                    android:text="▶ Play" />
+                    android:layout_weight="1"
+                    android:text="Summarize (0)" />
 
                 <Button
-                    android:id="@+id/btnSummaryFastForward"
-                    android:layout_width="wrap_content"
+                    android:id="@+id/btnDebateSelected"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
-                    android:text="⏩ +10s" />
-
-                <Button
-                    android:id="@+id/btnSummaryStop"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
-                    android:text="⏹ Stop" />
+                    android:layout_weight="1"
+                    android:text="AI Debate (0)" />
             </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerArticles"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
         </LinearLayout>
 
-        <ProgressBar
-            android:id="@+id/summaryProgressBar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerInParent="true"
-            android:visibility="gone" />
-
-        <ListView
-            android:id="@+id/listSummaries"
+        <!-- Feeds View -->
+        <LinearLayout
+            android:id="@+id/viewFeeds"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_below="@id/summaryHeader"
-            android:layout_marginTop="12dp" />
-
-        <ScrollView
-            android:id="@+id/scrollSummaryDetail"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_below="@id/summaryHeader"
-            android:layout_marginTop="12dp"
+            android:orientation="vertical"
             android:visibility="gone">
 
-            <TextView
-                android:id="@+id/textSummaryOutput"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="15sp"
-                android:lineSpacingExtra="3dp" />
-        </ScrollView>
-    </RelativeLayout>
+                android:orientation="horizontal">
 
-    <!-- Section 5: Settings View -->
-    <ScrollView
-        android:id="@+id/viewSettings"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@id/bottomNav"
-        android:padding="16dp"
-        android:visibility="gone">
+                <EditText
+                    android:id="@+id/inputFeedUrl"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Enter RSS Feed URL"
+                    android:inputType="textUri" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Settings"
-                android:textSize="20sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/inputApiKey"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="OpenRouter API Key (sk-or-...)"
-                android:inputType="textPassword"
-                android:layout_marginTop="12dp" />
+                <Button
+                    android:id="@+id/btnAddFeed"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Add Feed" />
+            </LinearLayout>
 
             <Button
-                android:id="@+id/btnSaveApiKey"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Save API Key" />
-
-            <Switch
-                android:id="@+id/switchAi"
+                android:id="@+id/btnDiscoverFeeds"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Enable AI Actions"
-                android:layout_marginTop="16dp" />
+                android:text="Discover Feeds by Country" />
 
-            <Switch
-                android:id="@+id/switchAutoMarkRead"
+            <ListView
+                android:id="@+id/listFeeds"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Auto Mark Articles as Read when Processed"
-                android:layout_marginTop="12dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Summary Length / Detail Depth"
-                android:layout_marginTop="16dp" />
-
-            <Spinner
-                android:id="@+id/spinnerDepth"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="AI Debate Perspective / Tone"
-                android:layout_marginTop="16dp" />
-
-            <Spinner
-                android:id="@+id/spinnerDebateTone"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Keep Read Articles For"
-                android:layout_marginTop="16dp" />
-
-            <Spinner
-                android:id="@+id/spinnerRetention"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="AI Output Target Language"
-                android:layout_marginTop="16dp" />
-
-            <Spinner
-                android:id="@+id/spinnerLanguage"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Select System TTS Voice Engine"
-                android:layout_marginTop="16dp" />
-
-            <Spinner
-                android:id="@+id/spinnerTtsVoice"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
+                android:layout_height="match_parent" />
         </LinearLayout>
-    </ScrollView>
 
-    <!-- Bottom Navigation Bar -->
-    <LinearLayout
-        android:id="@+id/bottomNav"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:orientation="horizontal"
-        android:background="#1E1E1E">
+        <!-- Article Reader View -->
+        <LinearLayout
+            android:id="@+id/viewReader"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
 
-        <Button
-            android:id="@+id/navFeeds"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Feeds" />
+            <Button
+                android:id="@+id/btnBackToArticles"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Back to Articles" />
 
-        <Button
-            android:id="@+id/navArticles"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Articles" />
+            <TextView
+                android:id="@+id/readerTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:textSize="18sp"
+                android:textStyle="bold" />
 
-        <Button
-            android:id="@+id/navSummaries"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Summaries" />
+            <!-- Reader Player Controls -->
+            <LinearLayout
+                android:id="@+id/readerMediaControls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center">
 
-        <Button
-            android:id="@+id/navSettings"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Settings" />
-    </LinearLayout>
+                <Button
+                    android:id="@+id/btnReaderRewind"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="&lt;&lt;" />
 
-</RelativeLayout>
+                <Button
+                    android:id="@+id/btnReaderPlayPause"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Play / Pause" />
+
+                <Button
+                    android:id="@+id/btnReaderFastForward"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="&gt;&gt;" />
+
+                <Button
+                    android:id="@+id/btnReaderStop"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Stop" />
+            </LinearLayout>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <TextView
+                    android:id="@+id/readerContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:lineSpacingExtra="4dp"
+                    android:textSize="15sp" />
+            </ScrollView>
+        </LinearLayout>
+
+        <!-- Summaries View -->
+        <LinearLayout
+            android:id="@+id/viewSummaries"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <ListView
+                android:id="@+id/listSummaries"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <ScrollView
+                android:id="@+id/scrollSummaryDetail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <Button
+                        android:id="@+id/btnBackToSummariesList"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Back to History" />
+
+                    <TextView
+                        android:id="@+id/summaryHeaderTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <!-- Summary Player Controls -->
+                    <LinearLayout
+                        android:id="@+id/summaryMediaControls"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center">
+
+                        <Button
+                            android:id="@+id/btnSummaryRewind"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&lt;&lt;" />
+
+                        <Button
+                            android:id="@+id/btnSummaryPlayPause"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Play / Pause" />
+
+                        <Button
+                            android:id="@+id/btnSummaryFastForward"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="&gt;&gt;" />
+
+                        <Button
+                            android:id="@+id/btnSummaryStop"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Stop" />
+                    </LinearLayout>
+
+                    <ProgressBar
+                        android:id="@+id/summaryProgressBar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/textSummaryOutput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:lineSpacingExtra="4dp"
+                        android:textSize="15sp" />
+                </LinearLayout>
+            </ScrollView>
+        </LinearLayout>
+
+        <!-- Settings View -->
+        <ScrollView
+            android:id="@+id/viewSettings"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Gemini API Key:"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/inputApiKey"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Paste your Gemini API key"
+                    android:inputType="textPassword" />
+
+                <Switch
+                    android:id="@+id/switchAi"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="8dp"
+                    android:text="Enable AI Features &amp; Selection" />
+
+                <Switch
+                    android:id="@+id/switchAutoMarkRead"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="8dp"
+                    android:text="Auto-mark articles as read on click" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="12dp"
+                    android:text="Target AI &amp; TTS Language:"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/spinnerLanguage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="12dp"
+                    android:text="Text-to-Speech Voice Engine:"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/spinnerTtsVoice"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="12dp"
+                    android:text="Read Article Retention Policy:"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/spinnerRetention"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="12dp"
+                    android:text="Summary Depth/Length:"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/spinnerDepth"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="12dp"
+                    android:text="AI Debate Angle / Tone:"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/spinnerDebateTone"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <Button
+                    android:id="@+id/btnSaveApiKey"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Save Settings" />
+            </LinearLayout>
+        </ScrollView>
+    </FrameLayout>
+</LinearLayout>
