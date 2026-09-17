@@ -687,6 +687,32 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
+    // --- TEXT SANITIZATION & CLEANUP HELPERS ---
+
+    private String sanitizeForDisplayAndTts(String text) {
+        if (text == null) return "";
+        return text.replaceAll("[{}]", "")
+                   .replaceAll("^\\s*\"|\"\\s*$", "")
+                   .replaceAll("(?m)^```[a-zA-Z]*", "")
+                   .replaceAll("```", "")
+                   .replaceAll("\\*\\*", "")
+                   .replaceAll("\\*", "")
+                   .trim();
+    }
+
+    private String formatDebateForDisplay(String text) {
+        String clean = sanitizeForDisplayAndTts(text);
+        return clean.replaceAll("(?i)(?:Speaker|Person|Host)\\s*A:\\s*", "Alex: ")
+                    .replaceAll("(?i)(?:Speaker|Person|Host)\\s*B:\\s*", "Jordan: ");
+    }
+
+    private String cleanSpeakerPrefixesForTts(String rawText) {
+        String clean = sanitizeForDisplayAndTts(rawText);
+        return clean.replaceAll("(?i)(?:Speaker|Person|Host|Alex|Jordan)\\s*[A-Z]?:\\s*", "");
+    }
+
+    // ------------------------------------------
+
     private void runAiAction(boolean isDebateMode) {
         String key = prefs.getString("api_key", "");
         if (key.isEmpty()) {
@@ -742,13 +768,14 @@ public class MainActivity extends AppCompatActivity {
                     prompt = "CRITICAL INSTRUCTION: You MUST speak, debate, and write your ENTIRE response exclusively in " + targetLang + " language.\n\n" +
                              "Generate a lively AI Debate between Speaker A and Speaker B comparing these articles.\n" +
                              "Tone/Perspective: " + tone + ".\n" +
-                             "Return ONLY a valid JSON object with keys 'title' (a short title in " + targetLang + ") and 'content' (the complete transcript in " + targetLang + " formatted cleanly with line breaks).\n\n" +
+                             "Do NOT surround your output in curly brackets {}, extra quotes, or JSON markup. Output strictly plain dialogue text formatted as:\n" +
+                             "Speaker A: [point]\nSpeaker B: [counterpoint]\n\n" +
                              "Articles:\n" + payload.toString();
                 } else {
                     prompt = "CRITICAL INSTRUCTION: You MUST write your ENTIRE summary exclusively in " + targetLang + " language.\n\n" +
                              "Summarize these articles in " + targetLang + ".\n" +
                              "Detail depth: " + depthConstraint + "\n" +
-                             "Return ONLY a valid JSON object with keys 'title' (a short title in " + targetLang + ") and 'content' (the summary points in " + targetLang + " formatted cleanly with line breaks).\n\n" +
+                             "Do NOT surround your output in curly brackets {}, extra quotes, or JSON markup. Output clean bullet points or prose.\n\n" +
                              "Articles:\n" + payload.toString();
                 }
 
@@ -767,25 +794,11 @@ public class MainActivity extends AppCompatActivity {
                                 .getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
                         
                         String parsedTitle = isDebateMode ? "AI Debate" : "News Summary";
-                        String parsedContent = rawContent;
-
-                        try {
-                            int firstBrace = rawContent.indexOf("{");
-                            int lastBrace = rawContent.lastIndexOf("}");
-                            if (firstBrace != -1 && lastBrace != -1) {
-                                JSONObject parsedJson = new JSONObject(rawContent.substring(firstBrace, lastBrace + 1));
-                                parsedTitle = parsedJson.optString("title", parsedTitle);
-                                parsedContent = parsedJson.optString("content", parsedJson.optString("summary", rawContent));
-                            }
-                        } catch (Exception ignored) {}
-
-                        parsedContent = parsedContent.replaceAll("^\\{\\s*\"content\":\\s*\"", "")
-                                                     .replaceAll("\"\\s*\\}$", "")
-                                                     .replace("\\n", "\n")
-                                                     .replace("\\\"", "\"");
+                        
+                        String cleanedContent = isDebateMode ? formatDebateForDisplay(rawContent) : sanitizeForDisplayAndTts(rawContent);
 
                         String timestamp = new SimpleDateFormat("MMM dd, yyyy - HH:mm", Locale.getDefault()).format(new Date());
-                        SummaryItem newSummary = new SummaryItem((isDebateMode ? "[Debate] " : "") + parsedTitle, timestamp, parsedContent);
+                        SummaryItem newSummary = new SummaryItem((isDebateMode ? "[Debate] " : "") + parsedTitle, timestamp, cleanedContent);
                         
                         savedSummaries.add(0, newSummary);
                         saveSummariesToPrefs();
@@ -801,12 +814,10 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
 
-                        String finalTitle = parsedTitle;
-                        String finalContent = parsedContent;
                         runOnUiThread(() -> {
                             summaryProgressBar.setVisibility(View.GONE);
                             filterArticles();
-                            showSummaryDetail(finalTitle, finalContent, true);
+                            showSummaryDetail(parsedTitle, cleanedContent, true);
                         });
                     } else {
                         String err = res.body() != null ? res.body().string() : "Unknown response error";
@@ -872,10 +883,6 @@ public class MainActivity extends AppCompatActivity {
         if (enableControls) {
             prepareTtsChunks(cleanSpeakerPrefixesForTts(content));
         }
-    }
-
-    private String cleanSpeakerPrefixesForTts(String rawText) {
-        return rawText.replaceAll("(?m)^(Speaker\\s+[A-Z]|Person\\s+[A-Z]|Host|Narrator|User):\\s*", "");
     }
 
     private void setupMediaPlayerClickListeners() {
