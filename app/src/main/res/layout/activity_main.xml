@@ -1,16 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:padding="16dp">
 
-    <!-- Top Navigation Bar -->
+    <!-- Top Navigation Bar (Sources first) -->
     <LinearLayout
+        android:id="@+id/topNavBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
         android:orientation="horizontal"
         android:weightSum="4">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/navFeeds"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="2dp"
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"
+            android:singleLine="true"
+            android:text="Sources"
+            android:textSize="12sp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/navArticles"
@@ -23,19 +37,6 @@
             android:paddingRight="2dp"
             android:singleLine="true"
             android:text="Articles"
-            android:textSize="12sp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/navFeeds"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginEnd="2dp"
-            android:paddingLeft="2dp"
-            android:paddingRight="2dp"
-            android:singleLine="true"
-            android:text="Feeds"
             android:textSize="12sp" />
 
         <com.google.android.material.button.MaterialButton
@@ -68,16 +69,50 @@
         android:id="@+id/statusText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp"
+        android:layout_below="@id/topNavBar"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
         android:text="Status: Ready"
         android:textSize="12sp" />
 
-    <!-- Main Content Container -->
+    <!-- Bottom AI Action Bar (Fixed at bottom) -->
+    <LinearLayout
+        android:id="@+id/layoutAiBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:orientation="horizontal"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <Button
+            android:id="@+id/btnSelectAllArticles"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Select All"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/btnSummarizeSelected"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Summarize (0)" />
+
+        <Button
+            android:id="@+id/btnDebateSelected"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="AI Debate (0)" />
+    </LinearLayout>
+
+    <!-- Main Content Area -->
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="match_parent"
+        android:layout_above="@id/layoutAiBar"
+        android:layout_below="@id/statusText">
 
         <!-- Articles View -->
         <LinearLayout
@@ -106,44 +141,13 @@
                     android:text="Read Articles" />
             </LinearLayout>
 
-            <!-- AI Action Bar with Selection Button -->
-            <LinearLayout
-                android:id="@+id/layoutAiBar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp">
-
-                <Button
-                    android:id="@+id/btnSelectAllArticles"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Select All"
-                    android:visibility="gone" />
-
-                <Button
-                    android:id="@+id/btnSummarizeSelected"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Summarize (0)" />
-
-                <Button
-                    android:id="@+id/btnDebateSelected"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="AI Debate (0)" />
-            </LinearLayout>
-
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recyclerArticles"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
         </LinearLayout>
 
-        <!-- Feeds View -->
+        <!-- Sources View -->
         <LinearLayout
             android:id="@+id/viewFeeds"
             android:layout_width="match_parent"
@@ -168,14 +172,14 @@
                     android:id="@+id/btnAddFeed"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Add Feed" />
+                    android:text="Add Source" />
             </LinearLayout>
 
             <Button
                 android:id="@+id/btnDiscoverFeeds"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Discover Feeds by Country" />
+                android:text="Discover Sources by Country" />
 
             <ListView
                 android:id="@+id/listFeeds"
@@ -206,13 +210,12 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
-            <!-- Reader Player Controls -->
             <LinearLayout
                 android:id="@+id/readerMediaControls"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center">
+                android:gravity="center"
+                android:orientation="horizontal">
 
                 <Button
                     android:id="@+id/btnReaderRewind"
@@ -291,13 +294,12 @@
                         android:textSize="18sp"
                         android:textStyle="bold" />
 
-                    <!-- Summary Player Controls -->
                     <LinearLayout
                         android:id="@+id/summaryMediaControls"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center">
+                        android:gravity="center"
+                        android:orientation="horizontal">
 
                         <Button
                             android:id="@+id/btnSummaryRewind"
@@ -356,14 +358,14 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Gemini API Key:"
+                    android:text="OpenRouter API Key:"
                     android:textStyle="bold" />
 
                 <EditText
                     android:id="@+id/inputApiKey"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Paste your Gemini API key"
+                    android:hint="Paste your OpenRouter API key"
                     android:inputType="textPassword" />
 
                 <Switch
@@ -449,4 +451,4 @@
             </LinearLayout>
         </ScrollView>
     </FrameLayout>
-</LinearLayout>
+</RelativeLayout>
