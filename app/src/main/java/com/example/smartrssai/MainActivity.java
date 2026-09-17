@@ -759,348 +759,116 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean isAnyArticleSelected() {
-        for (Article a : masterArticles) if (a.isSelected) return true;
+        for (Article a : masterArticles) {
+            if (a.isSelected) return true;
+        }
         return false;
     }
 
-    private void openCleanArticle(Article a) {
-        stopTts();
-        switchView(viewReader);
-        readerTitle.setText(a.title);
-        readerContent.setText("Extracting clean article text...");
-
-        new Thread(() -> {
-            try {
-                Document doc = Jsoup.connect(a.link).userAgent("Mozilla/5.0").timeout(8000).get();
-                doc.select("script, style, nav, header, footer, iframe, .ads, .comments, .sidebar, .related, aside, .trending").remove();
-
-                Elements container = doc.select("article, .entry-content, .post-content, .article-body, #content");
-                Elements paragraphs = !container.isEmpty() ? container.select("p") : doc.select("p");
-
-                StringBuilder cleanText = new StringBuilder();
-                for (Element p : paragraphs) {
-                    String text = p.text().trim();
-                    if (text.length() > 40) {
-                        cleanText.append(text).append("\n\n");
-                    }
-                }
-
-                String fullText = cleanText.length() > 0 ? cleanText.toString() : Jsoup.parse(a.description).text();
-                runOnUiThread(() -> {
-                    readerContent.setText(fullText);
-                    prepareTtsChunks(fullText);
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> readerContent.setText("Failed to extract full article text.\nLink: " + a.link));
-            }
-        }).start();
-    }
-
-    private String sanitizeForDisplayAndTts(String text) {
-        if (text == null) return "";
-        return text.replaceAll("[{}]", "")
-                   .replaceAll("^\\s*\"|\"\\s*$", "")
-                   .replaceAll("(?m)^```[a-zA-Z]*", "")
-                   .replaceAll("```", "")
-                   .replaceAll("\\*\\*", "")
-                   .replaceAll("\\*", "")
-                   .trim();
-    }
-
-    private String formatDebateForDisplay(String text) {
-        String clean = sanitizeForDisplayAndTts(text);
-        return clean.replaceAll("(?i)(?:Speaker|Person|Host)\\s*A:\\s*", "Alex: ")
-                    .replaceAll("(?i)(?:Speaker|Person|Host)\\s*B:\\s*", "Jordan: ");
-    }
-
-    private String cleanSpeakerPrefixesForTts(String rawText) {
-        String clean = sanitizeForDisplayAndTts(rawText);
-        return clean.replaceAll("(?i)(?:Speaker|Person|Host|Alex|Jordan)\\s*[A-Z]?:\\s*", "");
-    }
-
-    private void runAiAction(boolean isDebateMode) {
-        String key = prefs.getString("api_key", "");
-        if (key.isEmpty()) {
-            Toast.makeText(this, "Set API Key in Settings first", Toast.LENGTH_SHORT).show();
+    private void runAiAction(boolean isDebate) {
+        if (!isAnyArticleSelected()) {
+            Toast.makeText(this, "Please select at least one article.", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        stopTts();
+        String apiKey = prefs.getString("api_key", "").trim();
+        if (apiKey.isEmpty()) {
+            Toast.makeText(this, "API Key missing! Set it in Settings.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
         switchView(viewSummaries);
-        showSummaryDetail(isDebateMode ? "Generating Multi-Article Debate..." : "Generating Summary...", "Fetching content and contacting AI...", false);
+        listSummaries.setVisibility(View.GONE);
+        scrollSummaryDetail.setVisibility(View.VISIBLE);
         summaryProgressBar.setVisibility(View.VISIBLE);
+        summaryHeaderTitle.setText(isDebate ? "Generating AI Debate..." : "Generating Summary...");
+        textSummaryOutput.setText("");
 
         new Thread(() -> {
+            StringBuilder combinedContent = new StringBuilder();
+            for (Article a : masterArticles) {
+                if (a.isSelected) {
+                    combinedContent.append("Title: ").append(a.title).append("\n");
+                    combinedContent.append("Source: ").append(a.feedTitle).append("\n");
+                    combinedContent.append("Content: ").append(a.description).append("\n\n");
+                }
+            }
+
+            String lang = languages[prefs.getInt("language_index", 0)];
+            String depth = depthOptions[prefs.getInt("depth_index", 1)];
+            String tone = debateTones[prefs.getInt("debate_tone_index", 0)];
+
+            String prompt;
+            if (isDebate) {
+                prompt = "Perform a multi-perspective analysis/debate based on the following news articles. " +
+                        "Language: " + lang + ". Tone/Angle: " + tone + ". Detail Level: " + depth + ".\n\nArticles:\n" + combinedContent;
+            } else {
+                prompt = "Summarize the following news articles into a cohesive overview. " +
+                        "Language: " + lang + ". Detail Level: " + depth + ".\n\nArticles:\n" + combinedContent;
+            }
+
             try {
-                StringBuilder payload = new StringBuilder();
-                int totalSelected = 0;
-                for (Article a : masterArticles) {
-                    if (a.isSelected) {
-                        totalSelected++;
-                        try {
-                            Document doc = Jsoup.connect(a.link).userAgent("Mozilla/5.0").timeout(5000).get();
-                            doc.select("script, style, nav, header, footer, iframe, .ads, .comments, .sidebar").remove();
-                            Elements container = doc.select("article, .entry-content, .post-content, .article-body");
-                            String text = !container.isEmpty() ? container.text() : doc.body().text();
-                            
-                            payload.append("--- ARTICLE ").append(totalSelected).append(" ---\n")
-                                   .append("Source Feed: ").append(a.feedTitle).append("\n")
-                                   .append("Title: ").append(a.title).append("\n")
-                                   .append("Content: ").append(text.length() > 1000 ? text.substring(0, 1000) : text)
-                                   .append("\n\n");
-                        } catch (Exception e) {
-                            payload.append("--- ARTICLE ").append(totalSelected).append(" ---\n")
-                                   .append("Source Feed: ").append(a.feedTitle).append("\n")
-                                   .append("Title: ").append(a.title).append("\n")
-                                   .append("Content: ").append(a.description)
-                                   .append("\n\n");
-                        }
-                    }
-                }
-
                 OkHttpClient client = new OkHttpClient.Builder()
-                        .connectTimeout(15, TimeUnit.SECONDS)
-                        .readTimeout(45, TimeUnit.SECONDS)
+                        .connectTimeout(30, TimeUnit.SECONDS)
+                        .readTimeout(60, TimeUnit.SECONDS)
                         .build();
 
-                JSONObject json = new JSONObject();
-                json.put("model", "anthropic/claude-3-haiku");
+                JSONObject jsonBody = new JSONObject();
+                JSONArray contentsArr = new JSONArray();
+                JSONObject partsObj = new JSONObject();
+                JSONArray partsArr = new JSONArray();
+                JSONObject textObj = new JSONObject();
 
-                JSONArray msgs = new JSONArray();
-                
-                String targetLang = languages[prefs.getInt("language_index", 0)];
-                int depthIdx = prefs.getInt("depth_index", 1);
-                String depthConstraint = depthIdx == 0 ? "Keep it short and concise using tight bullet points." :
-                                         depthIdx == 1 ? "Provide a medium-length structured summary with detailed bullet points and key takeaways." :
-                                         "Provide a highly thorough, detailed deep dive with comprehensive analysis for every single article covered.";
+                textObj.put("text", prompt);
+                partsArr.put(textObj);
+                partsObj.put("parts", partsArr);
+                contentsArr.put(partsObj);
+                jsonBody.put("contents", contentsArr);
 
-                String tone = debateTones[prefs.getInt("debate_tone_index", 0)];
+                RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.parse("application/json"));
+                Request request = new Request.Builder()
+                        .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey)
+                        .post(body)
+                        .build();
 
-                String prompt;
-                if (isDebateMode) {
-                    prompt = "CRITICAL INSTRUCTIONS:\n" +
-                             "1. You MUST speak, debate, and write your ENTIRE response exclusively in " + targetLang + ".\n" +
-                             "2. You are provided with " + totalSelected + " articles covering various topics.\n" +
-                             "3. DO NOT focus on just one article! You MUST explicitly reference and synthesize ALL " + totalSelected + " articles across the conversation.\n" +
-                             "4. Debate the interconnected implications, contrasting viewpoints, and bigger picture synthesized across ALL provided topics.\n" +
-                             "Tone/Perspective: " + tone + ".\n" +
-                             "Format output strictly as dialogue without extra quotes or JSON formatting:\n" +
-                             "Speaker A: [point]\nSpeaker B: [counterpoint]\n\n" +
-                             "Articles Provided:\n" + payload.toString();
+                Response response = client.newCall(request).execute();
+                if (response.isSuccessful() && response.body() != null) {
+                    String resStr = response.body().string();
+                    JSONObject resJson = new JSONObject(resStr);
+                    String output = resJson.getJSONArray("candidates")
+                            .getJSONObject(0)
+                            .getJSONObject("content")
+                            .getJSONArray("parts")
+                            .getJSONObject(0)
+                            .getString("text");
+
+                    runOnUiThread(() -> {
+                        summaryProgressBar.setVisibility(View.GONE);
+                        summaryHeaderTitle.setText(isDebate ? "AI Debate Analysis" : "AI Summary");
+                        textSummaryOutput.setText(output);
+                        saveSummaryItem(isDebate ? "AI Debate" : "AI Summary", output);
+                    });
                 } else {
-                    prompt = "CRITICAL INSTRUCTIONS:\n" +
-                             "1. Write your ENTIRE summary exclusively in " + targetLang + ".\n" +
-                             "2. Synthesize and summarize ALL " + totalSelected + " provided articles.\n" +
-                             "Detail depth: " + depthConstraint + "\n" +
-                             "Format: Clean bullet points categorized by subject.\n\n" +
-                             "Articles Provided:\n" + payload.toString();
-                }
-
-                msgs.put(new JSONObject().put("role", "user").put("content", prompt));
-                json.put("messages", msgs);
-
-                Request req = new Request.Builder()
-                        .url("https://openrouter.ai/api/v1/chat/completions")
-                        .addHeader("Authorization", "Bearer " + key)
-                        .post(RequestBody.create(json.toString(), MediaType.parse("application/json")))
-                        .build();
-
-                try (Response res = client.newCall(req).execute()) {
-                    if (res.isSuccessful() && res.body() != null) {
-                        String rawContent = new JSONObject(res.body().string())
-                                .getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
-                        
-                        String parsedTitle = isDebateMode ? "AI Debate (" + totalSelected + " Articles)" : "News Summary (" + totalSelected + " Articles)";
-                        
-                        String cleanedContent = isDebateMode ? formatDebateForDisplay(rawContent) : sanitizeForDisplayAndTts(rawContent);
-
-                        String timestamp = new SimpleDateFormat("MMM dd, yyyy - HH:mm", Locale.getDefault()).format(new Date());
-                        SummaryItem newSummary = new SummaryItem((isDebateMode ? "[Debate] " : "") + parsedTitle, timestamp, cleanedContent);
-                        
-                        savedSummaries.add(0, newSummary);
-                        saveSummariesToPrefs();
-
-                        boolean autoMarkRead = prefs.getBoolean("auto_mark_read", true);
-                        for (Article a : masterArticles) {
-                            if (a.isSelected) {
-                                a.isSelected = false;
-                                if (autoMarkRead) {
-                                    a.isRead = true;
-                                    a.readTimestamp = System.currentTimeMillis();
-                                }
-                            }
-                        }
-
-                        runOnUiThread(() -> {
-                            summaryProgressBar.setVisibility(View.GONE);
-                            filterArticles();
-                            showSummaryDetail(parsedTitle, cleanedContent, true);
-                        });
-                    } else {
-                        String err = res.body() != null ? res.body().string() : "Unknown response error";
-                        runOnUiThread(() -> {
-                            summaryProgressBar.setVisibility(View.GONE);
-                            showSummaryDetail("API Error", "Error (" + res.code() + "): " + err, false);
-                        });
-                    }
+                    runOnUiThread(() -> {
+                        summaryProgressBar.setVisibility(View.GONE);
+                        textSummaryOutput.setText("Failed to generate response. Check API Key or connectivity.");
+                    });
                 }
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     summaryProgressBar.setVisibility(View.GONE);
-                    showSummaryDetail("Failed", "Error running AI action: " + e.getLocalizedMessage(), false);
+                    textSummaryOutput.setText("Error: " + e.getMessage());
                 });
             }
         }).start();
     }
 
-    private void showSummariesList() {
-        summaryHeaderTitle.setText("Saved Summaries");
-        btnBackToSummariesList.setVisibility(View.GONE);
-        summaryMediaControls.setVisibility(View.GONE);
-        scrollSummaryDetail.setVisibility(View.GONE);
-        listSummaries.setVisibility(View.VISIBLE);
+    private void saveSummaryItem(String titlePrefix, String content) {
+        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(new Date());
+        String title = titlePrefix + " - " + timestamp;
+        savedSummaries.add(0, new SummaryItem(title, timestamp, content));
 
-        List<String> listLabels = new ArrayList<>();
-        for (SummaryItem s : savedSummaries) {
-            listLabels.add(s.title + "\n" + s.timestamp);
-        }
-
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, listLabels);
-        listSummaries.setAdapter(adapter);
-
-        listSummaries.setOnItemClickListener((parent, view, position, id) -> {
-            SummaryItem item = savedSummaries.get(position);
-            showSummaryDetail(item.title, item.content, true);
-        });
-
-        listSummaries.setOnItemLongClickListener((parent, view, position, id) -> {
-            new AlertDialog.Builder(this)
-                    .setTitle("Delete Item")
-                    .setMessage("Do you want to delete this saved entry?")
-                    .setPositiveButton("Delete", (dialog, which) -> {
-                        savedSummaries.remove(position);
-                        saveSummariesToPrefs();
-                        showSummariesList();
-                    })
-                    .setNegativeButton("Cancel", null)
-                    .show();
-            return true;
-        });
-    }
-
-    private void showSummaryDetail(String title, String content, boolean enableControls) {
-        summaryHeaderTitle.setText(title);
-        textSummaryOutput.setText(content);
-
-        btnBackToSummariesList.setVisibility(View.VISIBLE);
-        summaryMediaControls.setVisibility(enableControls ? View.VISIBLE : View.GONE);
-        listSummaries.setVisibility(View.GONE);
-        scrollSummaryDetail.setVisibility(View.VISIBLE);
-
-        if (enableControls) {
-            prepareTtsChunks(cleanSpeakerPrefixesForTts(content));
-        }
-    }
-
-    private void setupMediaPlayerClickListeners() {
-        btnReaderPlayPause.setOnClickListener(v -> toggleTtsPlayPause(btnReaderPlayPause));
-        btnReaderStop.setOnClickListener(v -> stopTts());
-        btnReaderRewind.setOnClickListener(v -> rewindTts());
-        btnReaderFastForward.setOnClickListener(v -> fastForwardTts());
-
-        btnSummaryPlayPause.setOnClickListener(v -> toggleTtsPlayPause(btnSummaryPlayPause));
-        btnSummaryStop.setOnClickListener(v -> stopTts());
-        btnSummaryRewind.setOnClickListener(v -> rewindTts());
-        btnSummaryFastForward.setOnClickListener(v -> fastForwardTts());
-    }
-
-    private void prepareTtsChunks(String text) {
-        stopTts();
-        activeTextToRead = text;
-        activeParagraphChunks = text.split("\n+");
-        currentSpeechChunkIndex = 0;
-    }
-
-    private void toggleTtsPlayPause(Button targetButton) {
-        if (tts == null || activeParagraphChunks == null || activeParagraphChunks.length == 0) return;
-
-        if (isTtsPlaying) {
-            tts.stop();
-            isTtsPlaying = false;
-            isTtsPaused = true;
-            targetButton.setText("▶ Play");
-        } else {
-            isTtsPlaying = true;
-            isTtsPaused = false;
-            targetButton.setText("⏸ Pause");
-            speakCurrentChunk(targetButton);
-        }
-    }
-
-    private void speakCurrentChunk(Button targetButton) {
-        if (currentSpeechChunkIndex >= activeParagraphChunks.length) {
-            stopTts();
-            return;
-        }
-
-        String toSpeak = activeParagraphChunks[currentSpeechChunkIndex].trim();
-        if (toSpeak.isEmpty()) {
-            currentSpeechChunkIndex++;
-            speakCurrentChunk(targetButton);
-            return;
-        }
-
-        tts.speak(toSpeak, TextToSpeech.QUEUE_FLUSH, null, "TTS_CHUNK_ID");
-        tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
-            @Override
-            public void onStart(String utteranceId) {}
-
-            @Override
-            public void onDone(String utteranceId) {
-                if (isTtsPlaying && !isTtsPaused) {
-                    currentSpeechChunkIndex++;
-                    runOnUiThread(() -> speakCurrentChunk(targetButton));
-                }
-            }
-
-            @Override
-            public void onError(String utteranceId) {}
-        });
-    }
-
-    private void rewindTts() {
-        if (currentSpeechChunkIndex > 0) {
-            currentSpeechChunkIndex = Math.max(0, currentSpeechChunkIndex - 1);
-            if (isTtsPlaying) {
-                tts.stop();
-                speakCurrentChunk(viewReader.getVisibility() == View.VISIBLE ? btnReaderPlayPause : btnSummaryPlayPause);
-            }
-        }
-    }
-
-    private void fastForwardTts() {
-        if (activeParagraphChunks != null && currentSpeechChunkIndex < activeParagraphChunks.length - 1) {
-            currentSpeechChunkIndex++;
-            if (isTtsPlaying) {
-                tts.stop();
-                speakCurrentChunk(viewReader.getVisibility() == View.VISIBLE ? btnReaderPlayPause : btnSummaryPlayPause);
-            }
-        }
-    }
-
-    private void stopTts() {
-        if (tts != null) {
-            tts.stop();
-        }
-        isTtsPlaying = false;
-        isTtsPaused = false;
-        currentSpeechChunkIndex = 0;
-
-        btnReaderPlayPause.setText("▶ Play");
-        btnSummaryPlayPause.setText("▶ Play");
-    }
-
-    private void saveSummariesToPrefs() {
+        // Save to SharedPreferences
         try {
             JSONArray arr = new JSONArray();
             for (SummaryItem item : savedSummaries) {
@@ -1116,92 +884,150 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadSavedSummaries() {
         savedSummaries.clear();
-        String jsonStr = prefs.getString("saved_summaries_json", "[]");
-        try {
-            JSONArray arr = new JSONArray(jsonStr);
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                savedSummaries.add(new SummaryItem(
-                        obj.getString("title"),
-                        obj.getString("timestamp"),
-                        obj.getString("content")
-                ));
-            }
-        } catch (Exception ignored) {}
+        String jsonStr = prefs.getString("saved_summaries_json", null);
+        if (jsonStr != null) {
+            try {
+                JSONArray arr = new JSONArray(jsonStr);
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject obj = arr.getJSONObject(i);
+                    savedSummaries.add(new SummaryItem(
+                            obj.getString("title"),
+                            obj.getString("timestamp"),
+                            obj.getString("content")
+                    ));
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
-    private String getDateGroupHeader(long timestamp) {
-        Calendar today = Calendar.getInstance();
-        Calendar articleDate = Calendar.getInstance();
-        articleDate.setTimeInMillis(timestamp);
+    private void showSummariesList() {
+        listSummaries.setVisibility(View.VISIBLE);
+        scrollSummaryDetail.setVisibility(View.GONE);
 
-        if (today.get(Calendar.YEAR) == articleDate.get(Calendar.YEAR) &&
-            today.get(Calendar.DAY_OF_YEAR) == articleDate.get(Calendar.DAY_OF_YEAR)) {
-            return "Today";
+        List<String> titles = new ArrayList<>();
+        for (SummaryItem s : savedSummaries) {
+            titles.add(s.title);
         }
 
-        today.add(Calendar.DAY_OF_YEAR, -1);
-        if (today.get(Calendar.YEAR) == articleDate.get(Calendar.YEAR) &&
-            today.get(Calendar.DAY_OF_YEAR) == articleDate.get(Calendar.DAY_OF_YEAR)) {
-            return "Yesterday";
-        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, titles);
+        listSummaries.setAdapter(adapter);
 
-        return new SimpleDateFormat("EEEE, MMM dd", Locale.getDefault()).format(new Date(timestamp));
+        listSummaries.setOnItemClickListener((parent, view, position, id) -> {
+            SummaryItem selected = savedSummaries.get(position);
+            summaryHeaderTitle.setText(selected.title);
+            textSummaryOutput.setText(selected.content);
+            listSummaries.setVisibility(View.GONE);
+            scrollSummaryDetail.setVisibility(View.VISIBLE);
+        });
     }
 
-    class ArticleAdapter extends RecyclerView.Adapter<ArticleAdapter.ArticleHolder> {
+    private void setupMediaPlayerClickListeners() {
+        // Reader Media
+        btnReaderPlayPause.setOnClickListener(v -> toggleTtsPlayPause(readerContent.getText().toString()));
+        btnReaderStop.setOnClickListener(v -> stopTts());
+        btnReaderRewind.setOnClickListener(v -> skipTtsChunk(-1));
+        btnReaderFastForward.setOnClickListener(v -> skipTtsChunk(1));
+
+        // Summary Media
+        btnSummaryPlayPause.setOnClickListener(v -> toggleTtsPlayPause(textSummaryOutput.getText().toString()));
+        btnSummaryStop.setOnClickListener(v -> stopTts());
+        btnSummaryRewind.setOnClickListener(v -> skipTtsChunk(-1));
+        btnSummaryFastForward.setOnClickListener(v -> skipTtsChunk(1));
+    }
+
+    private void toggleTtsPlayPause(String fullText) {
+        if (!isTtsPlaying) {
+            activeTextToRead = fullText;
+            activeParagraphChunks = fullText.split("\n+");
+            currentSpeechChunkIndex = 0;
+            speakNextChunk();
+        } else if (isTtsPaused) {
+            isTtsPaused = false;
+            speakNextChunk();
+        } else {
+            isTtsPaused = true;
+            tts.stop();
+        }
+    }
+
+    private void speakNextChunk() {
+        if (activeParagraphChunks == null || currentSpeechChunkIndex >= activeParagraphChunks.length) {
+            stopTts();
+            return;
+        }
+
+        isTtsPlaying = true;
+        String chunk = activeParagraphChunks[currentSpeechChunkIndex];
+        tts.speak(chunk, TextToSpeech.QUEUE_FLUSH, null, "chunk_" + currentSpeechChunkIndex);
+    }
+
+    private void skipTtsChunk(int direction) {
+        if (activeParagraphChunks == null) return;
+        currentSpeechChunkIndex += direction;
+        if (currentSpeechChunkIndex < 0) currentSpeechChunkIndex = 0;
+        if (currentSpeechChunkIndex >= activeParagraphChunks.length) {
+            stopTts();
+            return;
+        }
+        speakNextChunk();
+    }
+
+    private void stopTts() {
+        if (tts != null) {
+            tts.stop();
+        }
+        isTtsPlaying = false;
+        isTtsPaused = false;
+        currentSpeechChunkIndex = 0;
+    }
+
+    // RecyclerView Adapter
+    private class ArticleAdapter extends RecyclerView.Adapter<ArticleViewHolder> {
 
         @NonNull
         @Override
-        public ArticleHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_rss_article, parent, false);
-            return new ArticleHolder(v);
+        public ArticleViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_rss_article, parent, false);
+            return new ArticleViewHolder(view);
         }
 
         @Override
-        public void onBindViewHolder(@NonNull ArticleHolder holder, int pos) {
-            Article a = displayedArticles.get(pos);
+        public void onBindViewHolder(@NonNull ArticleViewHolder holder, int position) {
+            Article article = displayedArticles.get(position);
 
-            String groupHeader = getDateGroupHeader(a.pubTimestamp);
-            boolean showHeader = pos == 0 || !getDateGroupHeader(displayedArticles.get(pos - 1).pubTimestamp).equals(groupHeader);
-
-            if (showHeader && holder.dateHeader != null) {
-                holder.dateHeader.setText(groupHeader);
-                holder.dateHeader.setVisibility(View.VISIBLE);
-            } else if (holder.dateHeader != null) {
-                holder.dateHeader.setVisibility(View.GONE);
-            }
-
-            holder.title.setText(a.title);
-            holder.snippet.setText(Jsoup.parse(a.description).text());
+            holder.title.setText(article.title);
             
             if (holder.feedLabel != null) {
-                holder.feedLabel.setText(a.feedTitle != null ? a.feedTitle : "RSS Feed");
+                holder.feedLabel.setText(article.feedTitle);
             }
 
-            holder.checkBox.setVisibility(a.isSelected ? View.VISIBLE : View.GONE);
-            holder.checkBox.setChecked(a.isSelected);
+            if (holder.snippet != null) {
+                holder.snippet.setText(Jsoup.parse(article.description).text());
+            }
 
-            holder.itemView.setOnClickListener(v -> {
-                if (isAnyArticleSelected()) {
-                    a.isSelected = !a.isSelected;
-                    notifyItemChanged(pos);
-                    updateSelectionCounter();
-                } else {
-                    if (!a.isRead) {
-                        a.isRead = true;
-                        a.readTimestamp = System.currentTimeMillis();
-                    }
-                    filterArticles();
-                    openCleanArticle(a);
-                }
+            if (holder.dateHeader != null) {
+                SimpleDateFormat sdf = new SimpleDateFormat("MMM dd, yyyy - HH:mm", Locale.getDefault());
+                holder.dateHeader.setText(sdf.format(new Date(article.pubTimestamp)));
+            }
+
+            boolean aiEnabled = switchAi.isChecked();
+            holder.checkBox.setVisibility(aiEnabled ? View.VISIBLE : View.GONE);
+            holder.checkBox.setChecked(article.isSelected);
+
+            holder.checkBox.setOnClickListener(v -> {
+                article.isSelected = holder.checkBox.isChecked();
+                updateSelectionCounter();
             });
 
-            holder.itemView.setOnLongClickListener(v -> {
-                a.isSelected = !a.isSelected;
-                notifyItemChanged(pos);
-                updateSelectionCounter();
-                return true;
+            holder.itemView.setOnClickListener(v -> {
+                if (prefs.getBoolean("auto_mark_read", true)) {
+                    article.isRead = true;
+                    article.readTimestamp = System.currentTimeMillis();
+                }
+
+                readerTitle.setText(article.title);
+                readerContent.setText(Jsoup.parse(article.description).text());
+                switchView(viewReader);
             });
         }
 
@@ -1209,19 +1035,19 @@ public class MainActivity extends AppCompatActivity {
         public int getItemCount() {
             return displayedArticles.size();
         }
+    }
 
-        class ArticleHolder extends RecyclerView.ViewHolder {
-            TextView title, snippet, feedLabel, dateHeader;
-            CheckBox checkBox;
+    public static class ArticleViewHolder extends RecyclerView.ViewHolder {
+        public TextView title, snippet, feedLabel, dateHeader;
+        public CheckBox checkBox;
 
-            ArticleHolder(View itemView) {
-                super(itemView);
-                title = itemView.findViewById(R.id.articleTitle);
-                snippet = itemView.findViewById(R.id.articleSnippet);
-                feedLabel = itemView.findViewById(R.id.articleFeedLabel);
-                dateHeader = itemView.findViewById(R.id.articleDateHeader);
-                checkBox = itemView.findViewById(R.id.articleCheckBox);
-            }
+        public ArticleViewHolder(View itemView) {
+            super(itemView);
+            title = itemView.findViewById(R.id.articleTitle);
+            snippet = itemView.findViewById(R.id.articleSnippet);
+            feedLabel = itemView.findViewById(R.id.articleFeedLabel);
+            dateHeader = itemView.findViewById(R.id.articleDateHeader);
+            checkBox = itemView.findViewById(R.id.articleCheckBox);
         }
     }
 
