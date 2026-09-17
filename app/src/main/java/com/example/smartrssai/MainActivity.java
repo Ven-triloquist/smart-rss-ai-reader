@@ -245,6 +245,15 @@ public class MainActivity extends AppCompatActivity {
             prefs.edit().putBoolean("auto_mark_read", isChecked).apply()
         );
 
+        spinnerLanguage.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                prefs.edit().putInt("language_index", pos).apply();
+                populateTtsVoices();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
         spinnerRetention.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
@@ -285,7 +294,7 @@ public class MainActivity extends AppCompatActivity {
 
         setupMediaPlayerClickListeners();
 
-        // Setup Standalone TTS Engine
+        // Setup TTS Engine
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 populateTtsVoices();
@@ -378,7 +387,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             if (addedAny) {
-                prefs.edit().putStringSet("feed_list", new HashSet<>(feedUrls)).apply();
+                saveFeedUrls();
                 renderFeedList();
                 fetchAllFeeds();
             }
@@ -469,8 +478,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void saveApiKey() {
-        prefs.edit().putString("api_key", inputApiKey.getText().toString().trim()).apply();
-        prefs.edit().putInt("language_index", spinnerLanguage.getSelectedItemPosition()).apply();
+        prefs.edit()
+                .putString("api_key", inputApiKey.getText().toString().trim())
+                .putInt("language_index", spinnerLanguage.getSelectedItemPosition())
+                .putInt("retention_index", spinnerRetention.getSelectedItemPosition())
+                .putInt("depth_index", spinnerDepth.getSelectedItemPosition())
+                .putInt("debate_tone_index", spinnerDebateTone.getSelectedItemPosition())
+                .apply();
         Toast.makeText(this, "Settings saved successfully!", Toast.LENGTH_SHORT).show();
     }
 
@@ -481,24 +495,41 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void populateTtsVoices() {
+        if (tts == null) return;
+        
         Set<Voice> voices = tts.getVoices();
         availableVoices.clear();
 
         List<VoiceItem> voiceItems = new ArrayList<>();
+        int selectedLangIdx = prefs.getInt("language_index", 0);
+        String targetLangCode = selectedLangIdx == 1 ? "es" :
+                                selectedLangIdx == 2 ? "nl" :
+                                selectedLangIdx == 3 ? "fr" :
+                                selectedLangIdx == 4 ? "de" : "en";
+
+        Voice savedOrMatchingVoice = null;
 
         if (voices != null) {
             for (Voice voice : voices) {
                 if (voice.getLocale() == null) continue;
                 
+                String langCode = voice.getLocale().getLanguage();
                 String langName = voice.getLocale().getDisplayLanguage(Locale.ENGLISH);
                 String country = voice.getLocale().getDisplayCountry(Locale.ENGLISH);
                 
-                String label = langName + (country.isEmpty() ? "" : " (" + country + ")") + " - " + voice.getName();
-                if (voice.isNetworkConnectionRequired()) {
-                    label += " [HD]";
-                }
+                if (langCode.equalsIgnoreCase(targetLangCode)) {
+                    String label = langName + (country.isEmpty() ? "" : " (" + country + ")") + " - " + voice.getName();
+                    if (voice.isNetworkConnectionRequired()) {
+                        label += " [HD]";
+                    }
 
-                voiceItems.add(new VoiceItem(voice, label, langName));
+                    VoiceItem item = new VoiceItem(voice, label, langName);
+                    voiceItems.add(item);
+
+                    if (savedOrMatchingVoice == null) {
+                        savedOrMatchingVoice = voice;
+                    }
+                }
             }
         }
 
@@ -510,7 +541,16 @@ public class MainActivity extends AppCompatActivity {
             voiceLabels.add(item.displayLabel);
         }
 
+        if (voiceLabels.isEmpty()) {
+            voiceLabels.add("Default System Voice (" + targetLangCode.toUpperCase() + ")");
+        }
+
         spinnerTtsVoice.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, voiceLabels));
+        
+        if (savedOrMatchingVoice != null) {
+            tts.setVoice(savedOrMatchingVoice);
+        }
+
         spinnerTtsVoice.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -537,7 +577,7 @@ public class MainActivity extends AppCompatActivity {
     private void loadSavedFeeds() {
         Set<String> saved = prefs.getStringSet("feed_list", null);
         feedUrls.clear();
-        if (saved != null) {
+        if (saved != null && !saved.isEmpty()) {
             feedUrls.addAll(saved);
         }
         renderFeedList();
@@ -548,11 +588,15 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void saveFeedUrls() {
+        prefs.edit().putStringSet("feed_list", new HashSet<>(feedUrls)).apply();
+    }
+
     private void addFeed() {
         String url = inputFeedUrl.getText().toString().trim();
         if (!url.isEmpty() && !feedUrls.contains(url)) {
             feedUrls.add(url);
-            prefs.edit().putStringSet("feed_list", new HashSet<>(feedUrls)).apply();
+            saveFeedUrls();
             inputFeedUrl.setText("");
             renderFeedList();
             fetchAllFeeds();
@@ -570,7 +614,7 @@ public class MainActivity extends AppCompatActivity {
                     .setMessage("Remove " + feedToRemove + "?\nThis will remove all associated articles from memory.")
                     .setPositiveButton("Remove", (dialog, which) -> {
                         feedUrls.remove(position);
-                        prefs.edit().putStringSet("feed_list", new HashSet<>(feedUrls)).apply();
+                        saveFeedUrls();
                         masterArticles.removeIf(a -> a.feedUrl.equals(feedToRemove));
                         renderFeedList();
                         filterArticles();
@@ -584,9 +628,9 @@ public class MainActivity extends AppCompatActivity {
     private void fetchAllFeeds() {
         statusText.setAlpha(1.0f);
         statusText.setText("Updating feeds...");
-        masterArticles.clear();
 
         new Thread(() -> {
+            List<Article> fetchedList = new ArrayList<>();
             for (String url : feedUrls) {
                 try {
                     Document doc = Jsoup.connect(url).userAgent("Mozilla/5.0").timeout(8000).get();
@@ -600,13 +644,27 @@ public class MainActivity extends AppCompatActivity {
                         String desc = item.select("description").text();
 
                         if (!title.isEmpty()) {
-                            masterArticles.add(new Article(title, link, desc, url));
+                            fetchedList.add(new Article(title, link, desc, url));
                         }
                     }
                 } catch (Exception ignored) {}
             }
 
             runOnUiThread(() -> {
+                // Merge fetched articles with current read states
+                for (Article newArt : fetchedList) {
+                    boolean exists = false;
+                    for (Article existing : masterArticles) {
+                        if (existing.link.equals(newArt.link)) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists) {
+                        masterArticles.add(newArt);
+                    }
+                }
+
                 applyRetentionPolicy();
                 filterArticles();
                 statusText.setText("Loaded " + masterArticles.size() + " items.");
@@ -617,7 +675,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyRetentionPolicy() {
         int index = prefs.getInt("retention_index", 2);
-        if (index == 3) return;
+        if (index == 3) return; // Keep Forever
 
         long daysInMillis = (index == 0 ? 1L : index == 1 ? 3L : 7L) * 24 * 60 * 60 * 1000;
         long now = System.currentTimeMillis();
@@ -687,7 +745,7 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    // --- TEXT SANITIZATION & CLEANUP HELPERS ---
+    // --- SANITIZATION & SPEAKER PARSING HELPERS ---
 
     private String sanitizeForDisplayAndTts(String text) {
         if (text == null) return "";
@@ -706,12 +764,13 @@ public class MainActivity extends AppCompatActivity {
                     .replaceAll("(?i)(?:Speaker|Person|Host)\\s*B:\\s*", "Jordan: ");
     }
 
+    // Strips speaker names (Alex, Jordan, Speaker A/B) so TTS reads purely conversational turns
     private String cleanSpeakerPrefixesForTts(String rawText) {
         String clean = sanitizeForDisplayAndTts(rawText);
         return clean.replaceAll("(?i)(?:Speaker|Person|Host|Alex|Jordan)\\s*[A-Z]?:\\s*", "");
     }
 
-    // ------------------------------------------
+    // ----------------------------------------------
 
     private void runAiAction(boolean isDebateMode) {
         String key = prefs.getString("api_key", "");
@@ -755,7 +814,7 @@ public class MainActivity extends AppCompatActivity {
 
                 JSONArray msgs = new JSONArray();
                 
-                String targetLang = languages[spinnerLanguage.getSelectedItemPosition()];
+                String targetLang = languages[prefs.getInt("language_index", 0)];
                 int depthIdx = prefs.getInt("depth_index", 1);
                 String depthConstraint = depthIdx == 0 ? "Keep it short and concise using tight bullet points." :
                                          depthIdx == 1 ? "Provide a medium-length structured summary with detailed bullet points and key takeaways." :
@@ -881,6 +940,7 @@ public class MainActivity extends AppCompatActivity {
         scrollSummaryDetail.setVisibility(View.VISIBLE);
 
         if (enableControls) {
+            // Cleans "Alex:", "Jordan:", and brackets before feeding lines to TTS engine
             prepareTtsChunks(cleanSpeakerPrefixesForTts(content));
         }
     }
