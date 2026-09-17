@@ -44,6 +44,7 @@ import okhttp3.Response;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -58,16 +59,19 @@ import java.util.concurrent.TimeUnit;
 public class MainActivity extends AppCompatActivity {
 
     public static class Article {
-        String title, link, description, feedUrl;
+        String title, link, description, feedUrl, feedTitle;
         boolean isRead = false;
         boolean isSelected = false;
         long readTimestamp = 0;
+        long pubTimestamp = System.currentTimeMillis();
 
-        Article(String title, String link, String description, String feedUrl) {
+        Article(String title, String link, String description, String feedUrl, String feedTitle, long pubTimestamp) {
             this.title = title;
             this.link = link;
             this.description = description;
             this.feedUrl = feedUrl;
+            this.feedTitle = feedTitle;
+            this.pubTimestamp = pubTimestamp > 0 ? pubTimestamp : System.currentTimeMillis();
         }
     }
 
@@ -91,7 +95,8 @@ public class MainActivity extends AppCompatActivity {
 
     private View viewFeeds, viewArticles, viewSettings, viewReader, viewSummaries;
     private Button navFeeds, navArticles, navSettings, navSummaries;
-    private Button btnTabNew, btnTabRead, btnAddFeed, btnDiscoverFeeds, btnSaveApiKey, btnSummarizeSelected, btnDebateSelected;
+    private Button btnTabNew, btnTabRead, btnAddFeed, btnDiscoverFeeds, btnSaveApiKey;
+    private Button btnSummarizeSelected, btnDebateSelected, btnSelectAllArticles;
     private Button btnBackToArticles, btnBackToSummariesList;
     
     // Media Player Controls
@@ -200,6 +205,7 @@ public class MainActivity extends AppCompatActivity {
         btnDiscoverFeeds = findViewById(R.id.btnDiscoverFeeds);
         btnSummarizeSelected = findViewById(R.id.btnSummarizeSelected);
         btnDebateSelected = findViewById(R.id.btnDebateSelected);
+        btnSelectAllArticles = findViewById(R.id.btnSelectAllArticles);
         inputFeedUrl = findViewById(R.id.inputFeedUrl);
         statusText = findViewById(R.id.statusText);
         listFeeds = findViewById(R.id.listFeeds);
@@ -236,6 +242,8 @@ public class MainActivity extends AppCompatActivity {
         btnDiscoverFeeds.setOnClickListener(v -> showDiscoverFeedsDialog());
         btnSaveApiKey.setOnClickListener(v -> saveApiKey());
         
+        btnSelectAllArticles.setOnClickListener(v -> toggleSelectAllArticles());
+
         switchAi.setOnCheckedChangeListener((btn, isChecked) -> {
             prefs.edit().putBoolean("ai_enabled", isChecked).apply();
             updateAiState();
@@ -310,7 +318,7 @@ public class MainActivity extends AppCompatActivity {
         List<FeedInfo> surinameFeeds = new ArrayList<>();
         surinameFeeds.add(new FeedInfo("Waterkant", "https://www.waterkant.net/feed/", "News"));
         surinameFeeds.add(new FeedInfo("De Ware Tijd", "https://dwtonline.com/feed/", "News"));
-        surinameFeeds.add(new FeedInfo("Starnieuws", "https://www.starnieuws.com/index.php/rss/index", "News"));
+        surinameFeeds.add(new FeedInfo("Starnieuws", "https://www.starnieuws.com/rss/starnieuws.rss", "News"));
         countryFeedDirectory.put("Suriname", surinameFeeds);
 
         List<FeedInfo> usaFeeds = new ArrayList<>();
@@ -634,6 +642,9 @@ public class MainActivity extends AppCompatActivity {
             for (String url : feedUrls) {
                 try {
                     Document doc = Jsoup.connect(url).userAgent("Mozilla/5.0").timeout(8000).get();
+                    String feedTitle = doc.select("channel > title, feed > title").text();
+                    if (feedTitle.isEmpty()) feedTitle = url.replaceAll("https?://(www\\.)?", "").replaceAll("/.*", "");
+
                     Elements items = doc.select("item");
                     if (items.isEmpty()) items = doc.select("entry");
 
@@ -641,17 +652,24 @@ public class MainActivity extends AppCompatActivity {
                         String title = item.select("title").text();
                         String link = item.select("link").text();
                         if (link.isEmpty()) link = item.select("link").attr("href");
-                        String desc = item.select("description").text();
+                        String desc = item.select("description, summary").text();
+                        String pubDateStr = item.select("pubDate, published, updated").text();
+
+                        long timestamp = System.currentTimeMillis();
+                        if (!pubDateStr.isEmpty()) {
+                            try {
+                                timestamp = new Date(pubDateStr).getTime();
+                            } catch (Exception ignored) {}
+                        }
 
                         if (!title.isEmpty()) {
-                            fetchedList.add(new Article(title, link, desc, url));
+                            fetchedList.add(new Article(title, link, desc, url, feedTitle, timestamp));
                         }
                     }
                 } catch (Exception ignored) {}
             }
 
             runOnUiThread(() -> {
-                // Merge fetched articles with current read states
                 for (Article newArt : fetchedList) {
                     boolean exists = false;
                     for (Article existing : masterArticles) {
@@ -664,6 +682,9 @@ public class MainActivity extends AppCompatActivity {
                         masterArticles.add(newArt);
                     }
                 }
+
+                // Sort master list descending by published time
+                Collections.sort(masterArticles, (a1, a2) -> Long.compare(a2.pubTimestamp, a1.pubTimestamp));
 
                 applyRetentionPolicy();
                 filterArticles();
@@ -700,11 +721,41 @@ public class MainActivity extends AppCompatActivity {
         updateSelectionCounter();
     }
 
+    private void toggleSelectAllArticles() {
+        boolean allSelected = true;
+        for (Article a : displayedArticles) {
+            if (!a.isSelected) {
+                allSelected = false;
+                break;
+            }
+        }
+
+        for (Article a : displayedArticles) {
+            a.isSelected = !allSelected;
+        }
+
+        articleAdapter.notifyDataSetChanged();
+        updateSelectionCounter();
+    }
+
     private void updateSelectionCounter() {
         int count = 0;
         for (Article a : masterArticles) if (a.isSelected) count++;
+        
         btnSummarizeSelected.setText("Summarize (" + count + ")");
         btnDebateSelected.setText("AI Debate (" + count + ")");
+
+        if (btnSelectAllArticles != null) {
+            btnSelectAllArticles.setVisibility(count > 0 ? View.VISIBLE : View.GONE);
+            boolean allDisplayedSelected = !displayedArticles.isEmpty();
+            for (Article a : displayedArticles) {
+                if (!a.isSelected) {
+                    allDisplayedSelected = false;
+                    break;
+                }
+            }
+            btnSelectAllArticles.setText(allDisplayedSelected ? "Deselect All" : "Select All");
+        }
     }
 
     private boolean isAnyArticleSelected() {
@@ -745,8 +796,6 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    // --- SANITIZATION & SPEAKER PARSING HELPERS ---
-
     private String sanitizeForDisplayAndTts(String text) {
         if (text == null) return "";
         return text.replaceAll("[{}]", "")
@@ -764,13 +813,10 @@ public class MainActivity extends AppCompatActivity {
                     .replaceAll("(?i)(?:Speaker|Person|Host)\\s*B:\\s*", "Jordan: ");
     }
 
-    // Strips speaker names (Alex, Jordan, Speaker A/B) so TTS reads purely conversational turns
     private String cleanSpeakerPrefixesForTts(String rawText) {
         String clean = sanitizeForDisplayAndTts(rawText);
         return clean.replaceAll("(?i)(?:Speaker|Person|Host|Alex|Jordan)\\s*[A-Z]?:\\s*", "");
     }
-
-    // ----------------------------------------------
 
     private void runAiAction(boolean isDebateMode) {
         String key = prefs.getString("api_key", "");
@@ -781,32 +827,40 @@ public class MainActivity extends AppCompatActivity {
 
         stopTts();
         switchView(viewSummaries);
-        showSummaryDetail(isDebateMode ? "Generating AI Debate..." : "Generating Summary...", "Fetching content and contacting AI...", false);
+        showSummaryDetail(isDebateMode ? "Generating Multi-Article Debate..." : "Generating Summary...", "Fetching content and contacting AI...", false);
         summaryProgressBar.setVisibility(View.VISIBLE);
 
         new Thread(() -> {
             try {
                 StringBuilder payload = new StringBuilder();
+                int totalSelected = 0;
                 for (Article a : masterArticles) {
                     if (a.isSelected) {
+                        totalSelected++;
                         try {
                             Document doc = Jsoup.connect(a.link).userAgent("Mozilla/5.0").timeout(5000).get();
                             doc.select("script, style, nav, header, footer, iframe, .ads, .comments, .sidebar").remove();
                             Elements container = doc.select("article, .entry-content, .post-content, .article-body");
                             String text = !container.isEmpty() ? container.text() : doc.body().text();
                             
-                            payload.append("Title: ").append(a.title).append("\n")
-                                   .append("Content: ").append(text.length() > 1500 ? text.substring(0, 1500) : text)
-                                   .append("\n\n---\n\n");
+                            payload.append("--- ARTICLE ").append(totalSelected).append(" ---\n")
+                                   .append("Source Feed: ").append(a.feedTitle).append("\n")
+                                   .append("Title: ").append(a.title).append("\n")
+                                   .append("Content: ").append(text.length() > 1000 ? text.substring(0, 1000) : text)
+                                   .append("\n\n");
                         } catch (Exception e) {
-                            payload.append("Title: ").append(a.title).append("\nContent: ").append(a.description).append("\n\n---\n\n");
+                            payload.append("--- ARTICLE ").append(totalSelected).append(" ---\n")
+                                   .append("Source Feed: ").append(a.feedTitle).append("\n")
+                                   .append("Title: ").append(a.title).append("\n")
+                                   .append("Content: ").append(a.description)
+                                   .append("\n\n");
                         }
                     }
                 }
 
                 OkHttpClient client = new OkHttpClient.Builder()
                         .connectTimeout(15, TimeUnit.SECONDS)
-                        .readTimeout(30, TimeUnit.SECONDS)
+                        .readTimeout(45, TimeUnit.SECONDS)
                         .build();
 
                 JSONObject json = new JSONObject();
@@ -824,18 +878,22 @@ public class MainActivity extends AppCompatActivity {
 
                 String prompt;
                 if (isDebateMode) {
-                    prompt = "CRITICAL INSTRUCTION: You MUST speak, debate, and write your ENTIRE response exclusively in " + targetLang + " language.\n\n" +
-                             "Generate a lively AI Debate between Speaker A and Speaker B comparing these articles.\n" +
+                    prompt = "CRITICAL INSTRUCTIONS:\n" +
+                             "1. You MUST speak, debate, and write your ENTIRE response exclusively in " + targetLang + ".\n" +
+                             "2. You are provided with " + totalSelected + " articles covering various topics.\n" +
+                             "3. DO NOT focus on just one article! You MUST explicitly reference and synthesize ALL " + totalSelected + " articles across the conversation.\n" +
+                             "4. Debate the interconnected implications, contrasting viewpoints, and bigger picture synthesized across ALL provided topics.\n" +
                              "Tone/Perspective: " + tone + ".\n" +
-                             "Do NOT surround your output in curly brackets {}, extra quotes, or JSON markup. Output strictly plain dialogue text formatted as:\n" +
+                             "Format output strictly as dialogue without extra quotes or JSON formatting:\n" +
                              "Speaker A: [point]\nSpeaker B: [counterpoint]\n\n" +
-                             "Articles:\n" + payload.toString();
+                             "Articles Provided:\n" + payload.toString();
                 } else {
-                    prompt = "CRITICAL INSTRUCTION: You MUST write your ENTIRE summary exclusively in " + targetLang + " language.\n\n" +
-                             "Summarize these articles in " + targetLang + ".\n" +
+                    prompt = "CRITICAL INSTRUCTIONS:\n" +
+                             "1. Write your ENTIRE summary exclusively in " + targetLang + ".\n" +
+                             "2. Synthesize and summarize ALL " + totalSelected + " provided articles.\n" +
                              "Detail depth: " + depthConstraint + "\n" +
-                             "Do NOT surround your output in curly brackets {}, extra quotes, or JSON markup. Output clean bullet points or prose.\n\n" +
-                             "Articles:\n" + payload.toString();
+                             "Format: Clean bullet points categorized by subject.\n\n" +
+                             "Articles Provided:\n" + payload.toString();
                 }
 
                 msgs.put(new JSONObject().put("role", "user").put("content", prompt));
@@ -852,7 +910,7 @@ public class MainActivity extends AppCompatActivity {
                         String rawContent = new JSONObject(res.body().string())
                                 .getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
                         
-                        String parsedTitle = isDebateMode ? "AI Debate" : "News Summary";
+                        String parsedTitle = isDebateMode ? "AI Debate (" + totalSelected + " Articles)" : "News Summary (" + totalSelected + " Articles)";
                         
                         String cleanedContent = isDebateMode ? formatDebateForDisplay(rawContent) : sanitizeForDisplayAndTts(rawContent);
 
@@ -940,7 +998,6 @@ public class MainActivity extends AppCompatActivity {
         scrollSummaryDetail.setVisibility(View.VISIBLE);
 
         if (enableControls) {
-            // Cleans "Alex:", "Jordan:", and brackets before feeding lines to TTS engine
             prepareTtsChunks(cleanSpeakerPrefixesForTts(content));
         }
     }
@@ -1073,6 +1130,25 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception ignored) {}
     }
 
+    private String getDateGroupHeader(long timestamp) {
+        Calendar today = Calendar.getInstance();
+        Calendar articleDate = Calendar.getInstance();
+        articleDate.setTimeInMillis(timestamp);
+
+        if (today.get(Calendar.YEAR) == articleDate.get(Calendar.YEAR) &&
+            today.get(Calendar.DAY_OF_YEAR) == articleDate.get(Calendar.DAY_OF_YEAR)) {
+            return "Today";
+        }
+
+        today.add(Calendar.DAY_OF_YEAR, -1);
+        if (today.get(Calendar.YEAR) == articleDate.get(Calendar.YEAR) &&
+            today.get(Calendar.DAY_OF_YEAR) == articleDate.get(Calendar.DAY_OF_YEAR)) {
+            return "Yesterday";
+        }
+
+        return new SimpleDateFormat("EEEE, MMM dd", Locale.getDefault()).format(new Date(timestamp));
+    }
+
     class ArticleAdapter extends RecyclerView.Adapter<ArticleAdapter.ArticleHolder> {
 
         @NonNull
@@ -1085,8 +1161,23 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(@NonNull ArticleHolder holder, int pos) {
             Article a = displayedArticles.get(pos);
+
+            String groupHeader = getDateGroupHeader(a.pubTimestamp);
+            boolean showHeader = pos == 0 || !getDateGroupHeader(displayedArticles.get(pos - 1).pubTimestamp).equals(groupHeader);
+
+            if (showHeader && holder.dateHeader != null) {
+                holder.dateHeader.setText(groupHeader);
+                holder.dateHeader.setVisibility(View.VISIBLE);
+            } else if (holder.dateHeader != null) {
+                holder.dateHeader.setVisibility(View.GONE);
+            }
+
             holder.title.setText(a.title);
             holder.snippet.setText(Jsoup.parse(a.description).text());
+            
+            if (holder.feedLabel != null) {
+                holder.feedLabel.setText(a.feedTitle != null ? a.feedTitle : "RSS Feed");
+            }
 
             holder.checkBox.setVisibility(a.isSelected ? View.VISIBLE : View.GONE);
             holder.checkBox.setChecked(a.isSelected);
@@ -1120,13 +1211,15 @@ public class MainActivity extends AppCompatActivity {
         }
 
         class ArticleHolder extends RecyclerView.ViewHolder {
-            TextView title, snippet;
+            TextView title, snippet, feedLabel, dateHeader;
             CheckBox checkBox;
 
             ArticleHolder(View itemView) {
                 super(itemView);
                 title = itemView.findViewById(R.id.articleTitle);
                 snippet = itemView.findViewById(R.id.articleSnippet);
+                feedLabel = itemView.findViewById(R.id.articleFeedLabel);
+                dateHeader = itemView.findViewById(R.id.articleDateHeader);
                 checkBox = itemView.findViewById(R.id.articleCheckBox);
             }
         }
