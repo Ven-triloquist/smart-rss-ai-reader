@@ -67,7 +67,7 @@ class ArticleAdapter extends RecyclerView.Adapter<ArticleAdapter.ArticleViewHold
     @Override
     public ArticleViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_article, parent, false);
+                .inflate(R.layout.item_rss_article, parent, false);
         return new ArticleViewHolder(view);
     }
 
@@ -167,7 +167,8 @@ class ArticleAdapter extends RecyclerView.Adapter<ArticleAdapter.ArticleViewHold
 // =========================================================================
 public class MainActivity extends AppCompatActivity {
 
-    private LinearLayout viewFeeds, viewArticles, viewReader, viewSummaries, viewSettings;
+    private LinearLayout viewFeeds, viewArticles, viewReader, viewSummaries;
+    private View viewSettings;
     private Button navFeeds, navArticles, navSummaries, navSettings;
     private Button btnSelectAllArticles, btnSummarizeSelected, btnDebateSelected;
     private RecyclerView recyclerArticles;
